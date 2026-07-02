@@ -1,0 +1,34 @@
+# Run outputs — everything except the explainer README
+runs/*
+!runs/README.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+
+# Testing / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local Claude Code state (keep .claude/skills and .claude/commands versioned)
+.claude/settings.local.json
+
+# Secrets — belt and braces; nothing in this repo should ever need one
+.env
+*.pem
