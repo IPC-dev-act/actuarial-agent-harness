@@ -55,6 +55,7 @@ class ValidationResult:
     input_sha256: str | None
     basis: str | None
     dimensions: dict[str, int] | None
+    basis_source: str | None = None  # "declared" | "inferred" (v0.1.13)
     checks: list[Check] = field(default_factory=list)
 
     @property
@@ -70,15 +71,30 @@ class ValidationResult:
         return {
             "input": {"path": str(self.input_path), "sha256": self.input_sha256},
             "basis": self.basis,
+            "basis_source": self.basis_source,
             "dimensions": self.dimensions,
             "checks": [c.to_dict() for c in self.checks],
             "verdict": self.verdict,
         }
 
 
-def validate_triangle_csv(path: Path) -> ValidationResult:
+def validate_triangle_csv(path: Path, declared_basis: str | None = None) -> ValidationResult:
+    """`declared_basis` (v0.1.13): an optional "cumulative"/"incremental"
+    override — authoritative when given. `basis_consistent` still runs its
+    usual inference vote independently; a declared value resolves an
+    otherwise-inconclusive tie, but a declared value that *conflicts* with a
+    definite inference is a fail (declared-vs-inferred conflict), not a
+    silent override — see `_check_basis_consistent`. `None` (the default)
+    preserves inference-only behaviour exactly as before v0.1.13.
+    """
     path = Path(path)
-    result = ValidationResult(input_path=path, input_sha256=None, basis=None, dimensions=None)
+    result = ValidationResult(
+        input_path=path,
+        input_sha256=None,
+        basis=None,
+        dimensions=None,
+        basis_source="declared" if declared_basis else "inferred",
+    )
 
     frame, read_error = _read_csv(path)
     if read_error is not None:
@@ -106,7 +122,7 @@ def validate_triangle_csv(path: Path) -> ValidationResult:
         # monotonicity/sign checks below meaningless — stop here.
         return result
 
-    basis, basis_check = _check_basis_consistent(normalized)
+    basis, basis_check = _check_basis_consistent(normalized, declared_basis)
     result.basis = basis
     result.checks.append(basis_check)
     if basis_check.verdict == "fail":
@@ -171,13 +187,25 @@ def _check_no_gaps(df: pd.DataFrame) -> Check:
     return Check("no_gaps", "pass")
 
 
-def _check_basis_consistent(df: pd.DataFrame) -> tuple[str | None, Check]:
+def _check_basis_consistent(
+    df: pd.DataFrame, declared_basis: str | None = None
+) -> tuple[str | None, Check]:
     """Infers cumulative vs incremental by comparing each origin's first and
     last observed value (endpoint comparison — robust to an interior
     decrease, which v0.1.2 treats as a legitimate warn-class feature of
-    incurred data, not a basis-breaking signal). Fails only when the votes
-    are genuinely tied or no origin has enough history to vote at all —
-    "mixed basis": no single interpretation explains the data.
+    incurred data, not a basis-breaking signal). With no `declared_basis`,
+    fails only when the votes are genuinely tied or no origin has enough
+    history to vote at all — "mixed basis": no single interpretation
+    explains the data. Unchanged from pre-v0.1.13 behaviour in that case.
+
+    `declared_basis` (v0.1.13) is authoritative, not advisory: if inference
+    is inconclusive (a tie, or too little history to vote), the declaration
+    resolves it and the check passes on the declared value. If inference
+    *does* reach a definite, opposing conclusion, that disagreement is
+    itself a fail — "declared-vs-inferred conflict" — rather than a silent
+    override in either direction; the caller stated an assumption the data
+    doesn't appear to support, and that needs a human's attention, not a
+    quiet pick between the two.
     """
     votes_cumulative = 0
     votes_incremental = 0
@@ -193,7 +221,29 @@ def _check_basis_consistent(df: pd.DataFrame) -> tuple[str | None, Check]:
             votes_incremental += 1
 
     total_votes = votes_cumulative + votes_incremental
-    if total_votes == 0 or votes_cumulative == votes_incremental:
+    inferred_basis = None
+    if total_votes > 0 and votes_cumulative != votes_incremental:
+        inferred_basis = "cumulative" if votes_cumulative > votes_incremental else "incremental"
+
+    if declared_basis is not None:
+        if inferred_basis is not None and inferred_basis != declared_basis:
+            return None, Check(
+                "basis_consistent",
+                "fail",
+                {
+                    "reason": "declared-vs-inferred conflict — the declared basis does not "
+                    "match what the data appears to be",
+                    "declared_basis": declared_basis,
+                    "inferred_basis": inferred_basis,
+                    "votes_cumulative": votes_cumulative,
+                    "votes_incremental": votes_incremental,
+                },
+            )
+        # Inference agrees, or was inconclusive (tie / too little history) —
+        # the declaration is authoritative either way.
+        return declared_basis, Check("basis_consistent", "pass")
+
+    if inferred_basis is None:
         return None, Check(
             "basis_consistent",
             "fail",
@@ -203,8 +253,7 @@ def _check_basis_consistent(df: pd.DataFrame) -> tuple[str | None, Check]:
                 "votes_incremental": votes_incremental,
             },
         )
-    basis = "cumulative" if votes_cumulative > votes_incremental else "incremental"
-    return basis, Check("basis_consistent", "pass")
+    return inferred_basis, Check("basis_consistent", "pass")
 
 
 def _cumulative_view(df: pd.DataFrame, basis: str) -> pd.DataFrame:

@@ -1,4 +1,4 @@
-# `reserve` CLI — command specification (v0.1.12, FROZEN)
+# `reserve` CLI — command specification (v0.1.13, FROZEN)
 
 Contract for Phase 2 implementation. Changes after freeze require a version bump
 and a note in this file's changelog.
@@ -25,19 +25,42 @@ and a note in this file's changelog.
 
 ## Commands
 
-### `reserve validate <triangle.csv> [--format] [--out]`
+### `reserve validate <triangle.csv> [--basis cumulative|incremental] [--format] [--out]`
 
 Structural checks, engine-agnostic. Checks (each with a stable `check_id`):
 `file_readable`, `shape_triangular`, `no_gaps`, `monotone_cumulative` (warn
 only, v0.1.2), `basis_consistent`, `origin_dev_parseable`,
 `nonneg_incrementals` (warn only).
 
-`basis_consistent` (v0.1.1): there is no `--basis` flag in v0.1 — basis is
-always *inferred* (monotone non-decreasing per origin ⇒ cumulative, else
-incremental). The check verifies the inference is not internally
-contradictory (e.g. no mix of origins that no single basis explains), not
-declared-vs-inferred agreement. A `--basis` override flag is left as a
-forward-compatible hook, not a v0.1 requirement.
+`basis_consistent` (v0.1.1; revisited v0.1.13): basis is *inferred* by
+default (monotone non-decreasing per origin ⇒ cumulative, else incremental).
+The check verifies the inference is not internally contradictory (e.g. no
+mix of origins that no single basis explains) — "mixed basis", `fail`, when
+votes tie or too few origins have enough history to vote at all.
+
+`--basis cumulative|incremental` (v0.1.13): an optional, authoritative
+declaration, on both `validate` and `fit`. Independent-review evidence
+(`data-validation` skill) showed the inference heuristic can be fooled by a
+smoothly, monotonically increasing *incremental* series, which votes
+"cumulative" the same way genuinely cumulative data does — a real class of
+data this harness had no way to flag before v0.1.13. When `--basis` is
+given:
+- If the inference vote is inconclusive (a tie, or too little history) —
+  the case that would otherwise fail as "mixed basis" — the declaration
+  resolves it: `basis_consistent` passes on the declared value.
+- If the inference vote *does* reach a definite, opposing conclusion, that
+  disagreement is itself a **fail** — "declared-vs-inferred conflict" — not
+  a silent override in either direction:
+  ```json
+  {"check_id": "basis_consistent", "verdict": "fail",
+   "details": {"reason": "declared-vs-inferred conflict — the declared basis does not match what the data appears to be",
+               "declared_basis": "cumulative", "inferred_basis": "incremental",
+               "votes_cumulative": 2, "votes_incremental": 8}}
+  ```
+- If the inference vote agrees with the declaration, `basis_consistent`
+  passes on that (shared) value, same as if it were undeclared.
+- Absent (the default): inference stands exactly as before v0.1.13 — no
+  behavioural change to the undeclared path.
 
 `monotone_cumulative` (v0.1.2): warn-class, not fail-class. A decrease
 between consecutive development periods is legitimate on incurred data
@@ -57,6 +80,7 @@ Output `validation.json`:
 {
   "input": {"path": "…", "sha256": "…"},
   "basis": "cumulative",
+  "basis_source": "inferred",
   "dimensions": {"origins": 10, "devs": 10},
   "checks": [
     {"check_id": "no_gaps", "verdict": "pass", "details": null},
@@ -66,26 +90,39 @@ Output `validation.json`:
   "verdict": "warn"
 }
 ```
+`basis_source` (v0.1.13): `"declared"` if `--basis` was given, `"inferred"`
+otherwise — always `null` alongside `basis` until parsing succeeds, same as
+before.
+
 Exit: 0 all pass or warn-only (verdicts stay visible) · 2 any fail
 (`no_gaps`, `origin_dev_parseable`, or `basis_consistent`).
 
-### `reserve fit <triangle.csv> --method mack [--averaging volume|simple] [--tail none|constant:<f>] [--n-periods N] [--exclude-origins LIST] [--exclude-valuations LIST] [--sigma-interpolation mack|log-linear] [--format] [--out] [--dry-run]`
+### `reserve fit <triangle.csv> --method mack [--averaging volume|simple] [--tail none|constant:<f>] [--n-periods N] [--exclude-origins LIST] [--exclude-valuations LIST] [--basis cumulative|incremental] [--sigma-interpolation mack|log-linear] [--format] [--out] [--dry-run]`
 
 Runs validate first (hard rule); refuses with exit 2 if validation fails.
 Dispatches to the engine adapter. `--method` values outside adapter
-`capabilities()` ⇒ exit 4.
+`capabilities()` ⇒ exit 4. `--basis` (v0.1.13) is passed straight through to
+the internal `validate` call — see the `validate` section for its full
+semantics (declared-vs-inferred conflict fails `basis_consistent`, and thus
+`fit`, before the adapter is ever consulted).
 
-**Basis mismatch** (v0.1.10): `capabilities()` now declares `"basis":
-["cumulative"]` — the adapter's `load_triangle` has always hardcoded
-cumulative handling, previously an undeclared, silent limitation. If
-`validate`'s inferred basis (`validation.json: basis`) isn't in that list,
-`fit` refuses with exit 2, printing a structured error instead of the
-`validate` output:
+**Basis mismatch** (v0.1.10; `basis_source` added v0.1.13): `capabilities()`
+now declares `"basis": ["cumulative"]` — the adapter's `load_triangle` has
+always hardcoded cumulative handling, previously an undeclared, silent
+limitation. If the basis in effect (`validation.json: basis` — the declared
+value when one was given and it agreed with inference, the inferred value
+otherwise) isn't in that list, `fit` refuses with exit 2, printing a
+structured error instead of the `validate` output:
 ```json
 {"error": "unsupported_basis",
  "message": "engine adapter supports cumulative input only; inferred basis: incremental",
  "adapter_supported_basis": ["cumulative"], "inferred_basis": "incremental"}
 ```
+When the basis in effect was declared rather than inferred, `message` says
+so explicitly ("declared basis: …") and the payload gains `"basis_source":
+"declared"` — the undeclared payload shape above is unchanged, byte for
+byte, this key is only ever present when `--basis` was given.
+
 The run folder still persists `validation.json` + `manifest.json`
 (`exit_code: 2`, `outputs: ["validation.json"]`, no `fit.json`) — same
 storage convention as any other validate-first refusal (v0.1.1), even
@@ -571,3 +608,22 @@ agent can query them without reading this file):
     collapsing both onto one flag would silently overload its meaning by
     command. No behavior changes here, only this file's own text. See the
     `report` section.
+- v0.1.13 (2026-07-03): Q3 revisited on independent-review evidence:
+  inference retained as default, explicit declaration added as authoritative.
+  `validate`/`fit` gain `--basis cumulative|incremental`. Absent, behaviour is
+  unchanged from before this entry — inference alone, exactly as v0.1.1 left
+  it. Given, it is authoritative: a conflict with the adapter's declared
+  basis is still an exit-2 `unsupported_basis` refusal (v0.1.10), now with
+  `"basis_source": "declared"` in the payload and accurate wording; a
+  conflict with what the inference heuristic independently concludes is a
+  new `basis_consistent` fail mode, "declared-vs-inferred conflict" — the
+  declaration doesn't silently win, or lose, against the data's apparent
+  shape, it surfaces the disagreement. The basis actually used, and how it
+  was determined, is recorded on `validation.json` (`basis_source`) and on
+  the manifest (`parameters.basis: {value, source}`) either way. Motivated by
+  independent review: the inference heuristic can be fooled by a smoothly,
+  monotonically increasing incremental series, which votes "cumulative" the
+  same way genuinely cumulative data does — declaration is the escape hatch
+  for exactly that case. `data-validation` skill updated with this caveat and
+  the recommendation to declare whenever incremental data is plausible. See
+  the `validate` and `fit` sections.

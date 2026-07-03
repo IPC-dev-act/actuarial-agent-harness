@@ -6,7 +6,9 @@ Each item below has a proposed default. **Status: Q1–Q3 confirmed by Ivan
 Perincic 2026-07-02 — all proposed defaults approved as written. Q2 and Q3
 are now codified as normative text in `docs/cli-spec.md` v0.1.1 (see its
 changelog); Q1's shared-folder consequence (`diagnostics` needing `--out`
-to find a `fit` run written under a custom root) is now codified in v0.1.3.**
+to find a `fit` run written under a custom root) is now codified in v0.1.3.
+Q3's inference-only default was revisited in v0.1.13 — see the note under
+Q3 below and that version's changelog entry.**
 
 ## Q1. Do `diagnostics` and `sensitivity` write into the *same* run folder as
 the `fit` they operate on, or mint a new run_id each time?
@@ -55,6 +57,17 @@ check verifies the inference isn't internally contradictory (e.g. mixed
 monotone/non-monotone origins that no single basis explains) rather than
 checking inferred-vs-declared agreement. "Declared" is read as a forward
 hook for a future `--basis` flag, not a v0.1 requirement.
+
+**Revisited, v0.1.13 (2026-07-03):** the forward hook above is now built.
+Independent review surfaced a real gap the inference-only default couldn't
+catch — a smoothly, monotonically increasing incremental series votes
+"cumulative" indistinguishably from genuinely cumulative data. `--basis
+cumulative|incremental` is now available on `validate`/`fit`, authoritative
+when given: it resolves an otherwise-inconclusive tie, but a definite,
+opposing inference is surfaced as a new `basis_consistent` fail
+("declared-vs-inferred conflict"), not silently overridden. Absent, nothing
+changes from the default above. See `docs/cli-spec.md`'s v0.1.13 changelog
+entry and its `validate` section.
 
 ---
 

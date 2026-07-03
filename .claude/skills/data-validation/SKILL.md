@@ -13,12 +13,32 @@ frozen contract; this skill is how you talk about its output).
 
 ## Reading the output
 
-`validation.json` has `basis`, `dimensions`, a `checks` array, and a top-level
-`verdict` (`pass`/`warn`/`fail`). Checks short-circuit: a fail upstream means
-downstream checks don't run at all and won't appear in the array — seeing only
-2 entries instead of 7 is expected, not a bug, when `file_readable` or
-`origin_dev_parseable` fails. `basis`/`dimensions` stay `null` until parsing
-succeeds.
+`validation.json` has `basis`, `basis_source`, `dimensions`, a `checks` array,
+and a top-level `verdict` (`pass`/`warn`/`fail`). Checks short-circuit: a fail
+upstream means downstream checks don't run at all and won't appear in the
+array — seeing only 2 entries instead of 7 is expected, not a bug, when
+`file_readable` or `origin_dev_parseable` fails. `basis`/`basis_source`/
+`dimensions` stay `null` until parsing succeeds.
+
+`basis_source` (v0.1.13) is `"declared"` when the caller passed `--basis
+cumulative|incremental` to `validate`/`fit`, `"inferred"` otherwise. Always
+cite which one it was — "basis: cumulative" reads very differently depending
+on whether a human declared that or a heuristic guessed it, and CLAUDE.md
+rule 1 requires the distinction to be traceable, not assumed.
+
+**Inference is a heuristic, not a certainty.** `basis_consistent`'s inference
+votes each origin by comparing its first and last observed value (last ≥
+first ⇒ votes cumulative). This is usually right, but it is a shape-based
+guess, not a read of the data's actual meaning — a smoothly, monotonically
+increasing incremental series (e.g. steadily growing claim counts reported
+period-over-period) can vote "cumulative" even though it is genuinely
+incremental data, because the heuristic has no way to distinguish "this is a
+running total" from "this incremental series happens to keep growing."
+**Whenever incremental data is plausible for the input in front of you,
+recommend declaring `--basis incremental` explicitly** rather than trusting
+inference — it costs nothing when you're right, and it turns a silent
+misread into a loud, checkable conflict when you're not (see the
+`basis_consistent` row below).
 
 Exit codes: **0** — all pass, or warn-only. **2** — any fail-class check fired.
 (3/4/1 don't apply to `validate`; see `docs/cli-spec.md`'s harness-wide table.)
@@ -31,14 +51,18 @@ Exit codes: **0** — all pass, or warn-only. **2** — any fail-class check fir
 | `origin_dev_parseable` | fail | required columns missing, or origin/development/value not numeric | not shaped like a triangle CSV | report `details.missing_columns` or `details.unparseable_rows`; do not attempt a fit |
 | `shape_triangular` | fail | a newer origin has *more* development than an older one | not a staircase — scrambled file, wrong sort, or a genuinely rectangular dataset | report the origin pair from `details.violations`; ask for a corrected export, don't guess the fix yourself |
 | `no_gaps` | fail | an origin has a hole *inside* its own history | a missing valuation, not a missing future (which is normal and expected) | report `details.violations` (origin + missing dev); blocks `fit` (exit 2) |
-| `basis_consistent` | fail | cumulative-vs-incremental vote ties across origins | genuinely ambiguous, not a one-line fix | report `details.votes_cumulative`/`votes_incremental`; **ask the user, in conversation**† — do not guess |
+| `basis_consistent` | fail | either: cumulative-vs-incremental vote ties across origins, **or** (v0.1.13) a declared `--basis` conflicts with what inference independently concludes | genuinely ambiguous (tie case), or a stated assumption disagreeing with the data's apparent shape (conflict case) — not a one-line fix either way | tie case: report `details.votes_cumulative`/`votes_incremental`; **ask the user, in conversation**† — do not guess. Conflict case: report `details.declared_basis` and `details.inferred_basis` plainly — this is the harness surfacing a real disagreement, not a bug; don't silently pick one side |
 | `monotone_cumulative` | **warn** | a cumulative value decreases between two valuations | legitimate on incurred data (case reserve reduction) by default, not automatically a defect | narrate as a feature under review, not an error (see `mack-diagnostics`' RAA example) — does not block `fit` |
 | `nonneg_incrementals` | **warn** | an implied incremental is negative | the same underlying signal as `monotone_cumulative`, viewed incrementally | usually fires alongside it on the same cell; same treatment |
 
-† `basis_consistent`'s "ask" is not resolvable by re-reading the file, running
+† The tie case's "ask" is not resolvable by re-reading the file, running
 another command, or inferring harder — it is a direct question to the human
 you're working with ("is this cumulative or incremental data?"), the same way
-you'd ask about any other genuinely ambiguous instruction.
+you'd ask about any other genuinely ambiguous instruction. Once you have an
+answer, the actionable next step is re-running `validate`/`fit` with
+`--basis cumulative|incremental` (v0.1.13) — not just noting the answer in
+prose, since an undeclared re-run would go straight back through the same
+heuristic.
 
 `monotone_cumulative`/`nonneg_incrementals` details: `{"origin", "dev",
 "values"/"incremental"}`. Fail-class details vary by check — see the table

@@ -127,7 +127,8 @@ Written by every command that produces output, at `runs/<run-id>/manifest.json`:
   "inputs": [{"path": "examples/raa.csv", "sha256": "…", "snapshot": "inputs/raa.csv"}],
   "engine": {"adapter": "chainladder_adapter", "package": "chainladder", "version": "0.9.2"},
   "environment": {"python": "3.12.1", "harness_version": "0.1.0", "locked_deps_sha256": "…"},
-  "parameters": {"method": "mack", "averaging": "volume", "tail": "none"},
+  "parameters": {"method": "mack", "averaging": "volume", "tail": "none",
+                  "basis": {"value": "cumulative", "source": "inferred"}},
   "outputs": ["fit.json", "diagnostics.json"],
   "exit_code": 3
 }
@@ -144,3 +145,10 @@ self-contained audit object, independent of the original file's path, mutation,
 or deletion after the fact. Run folders minted before v0.1.12 have no
 `snapshot` key; replay falls back to `inputs[].path` for those, under the same
 sha256 check (`docs/cli-spec.md`'s `diagnostics` section, "Audit replay").
+
+`parameters.basis` (v0.1.13, `validate`- and `fit`-written runs): the basis
+actually used, and how it was determined — `source` is `"declared"` if
+`--basis cumulative|incremental` was passed, `"inferred"` otherwise. Recorded
+either way, so a manifest alone (without re-reading `validation.json`) always
+answers "was this basis a stated assumption or a guess?" (`docs/cli-spec.md`'s
+`validate` section).

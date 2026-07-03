@@ -85,6 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_validate = subparsers.add_parser("validate", help="Structural checks on a triangle CSV")
     p_validate.add_argument("triangle_csv", type=Path)
+    p_validate.add_argument("--basis", choices=["cumulative", "incremental"], default=None)
     _add_format_arg(p_validate)
     _add_out_arg(p_validate)
     p_validate.set_defaults(handler=cmd_validate)
@@ -97,6 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_fit.add_argument("--n-periods", type=int, default=None)
     p_fit.add_argument("--exclude-origins", default="")
     p_fit.add_argument("--exclude-valuations", default="")
+    p_fit.add_argument("--basis", choices=["cumulative", "incremental"], default=None)
     p_fit.add_argument(
         "--sigma-interpolation",
         choices=["mack", "log-linear"],
@@ -167,6 +169,8 @@ def _invocation_string(command: str, args: argparse.Namespace) -> str:
         parts.append(str(args.run_id))
     if hasattr(args, "method"):
         parts.append(f"--method {args.method}")
+    if getattr(args, "basis", None) is not None:
+        parts.append(f"--basis {args.basis}")
     parts.append(f"--format {args.format}")
     if hasattr(args, "out"):
         parts.append(f"--out {args.out}")
@@ -175,8 +179,16 @@ def _invocation_string(command: str, args: argparse.Namespace) -> str:
     return " ".join(parts)
 
 
+def _basis_parameters(result: validation.ValidationResult) -> dict:
+    """Manifest `parameters.basis` (v0.1.13): the basis actually used and
+    whether it was declared (`--basis`) or inferred — recorded whichever way
+    it was determined, per docs/cli-spec.md's `validate`/`fit` sections.
+    """
+    return {"value": result.basis, "source": result.basis_source}
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
-    result = validation.validate_triangle_csv(args.triangle_csv)
+    result = validation.validate_triangle_csv(args.triangle_csv, declared_basis=args.basis)
     payload = result.to_dict()
     exit_code = EXIT_VALIDATION_FAILURE if result.verdict == "fail" else EXIT_SUCCESS
 
@@ -190,7 +202,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
             command=_invocation_string("validate", args),
             inputs=_inputs_for(args.triangle_csv, result.input_sha256),
             engine=None,
-            parameters={},
+            parameters={"basis": _basis_parameters(result)},
             outputs=["validation.json"],
             exit_code=exit_code,
         ),
@@ -204,7 +216,7 @@ def _render_validation_text(payload: dict, run_id: str) -> str:
     lines = [
         f"run_id:     {run_id}",
         f"input:      {payload['input']['path']}",
-        f"basis:      {payload['basis']}",
+        f"basis:      {payload['basis']} ({payload['basis_source']})",
         f"dimensions: {payload['dimensions']}",
         "checks:",
     ]
@@ -217,15 +229,16 @@ def _render_validation_text(payload: dict, run_id: str) -> str:
 
 
 def _render_basis_mismatch_text(payload: dict, run_id: str) -> str:
-    return "\n".join(
-        [
-            f"run_id: {run_id}",
-            f"error: {payload['error']}",
-            f"message: {payload['message']}",
-            f"adapter_supported_basis: {payload['adapter_supported_basis']}",
-            f"inferred_basis: {payload['inferred_basis']}",
-        ]
-    )
+    lines = [
+        f"run_id: {run_id}",
+        f"error: {payload['error']}",
+        f"message: {payload['message']}",
+        f"adapter_supported_basis: {payload['adapter_supported_basis']}",
+        f"inferred_basis: {payload['inferred_basis']}",
+    ]
+    if "basis_source" in payload:
+        lines.append(f"basis_source: {payload['basis_source']}")
+    return "\n".join(lines)
 
 
 def cmd_fit(args: argparse.Namespace) -> int:
@@ -248,7 +261,7 @@ def cmd_fit(args: argparse.Namespace) -> int:
         print(f"usage error: {exc}", file=sys.stderr)
         return EXIT_USAGE_ERROR
 
-    validation_result = validation.validate_triangle_csv(args.triangle_csv)
+    validation_result = validation.validate_triangle_csv(args.triangle_csv, declared_basis=args.basis)
     run_id = runs.new_run_id(args.triangle_csv.stem, args.method)
 
     if validation_result.verdict == "fail":
@@ -264,7 +277,7 @@ def cmd_fit(args: argparse.Namespace) -> int:
                 command=_invocation_string("fit", args),
                 inputs=_inputs_for(args.triangle_csv, validation_result.input_sha256),
                 engine=None,
-                parameters={},
+                parameters={"basis": _basis_parameters(validation_result)},
                 outputs=["validation.json"],
                 exit_code=EXIT_VALIDATION_FAILURE,
             ),
@@ -292,15 +305,27 @@ def cmd_fit(args: argparse.Namespace) -> int:
         # failure (Q2 convention: validation.json + manifest, exit 2, no
         # fit.json), even though validate's own verdict was pass/warn — the
         # refusal is about adapter capability, not a structural data defect.
-        error_payload = {
-            "error": "unsupported_basis",
-            "message": (
+        if validation_result.basis_source == "declared":
+            # The declared value is authoritative and already agrees with
+            # inference (a conflict there would have failed basis_consistent
+            # above) — this refusal is purely about adapter capability.
+            message = (
+                f"engine adapter supports {' or '.join(capabilities['basis'])} input only; "
+                f"declared basis: {validation_result.basis}"
+            )
+        else:
+            message = (
                 f"engine adapter supports {' or '.join(capabilities['basis'])} "
                 f"input only; inferred basis: {validation_result.basis}"
-            ),
+            )
+        error_payload = {
+            "error": "unsupported_basis",
+            "message": message,
             "adapter_supported_basis": capabilities["basis"],
             "inferred_basis": validation_result.basis,
         }
+        if validation_result.basis_source == "declared":
+            error_payload["basis_source"] = "declared"
         _write_run(
             run_id=run_id,
             out_root=args.out,
@@ -310,7 +335,7 @@ def cmd_fit(args: argparse.Namespace) -> int:
                 command=_invocation_string("fit", args),
                 inputs=_inputs_for(args.triangle_csv, validation_result.input_sha256),
                 engine=None,
-                parameters={},
+                parameters={"basis": _basis_parameters(validation_result)},
                 outputs=["validation.json"],
                 exit_code=EXIT_VALIDATION_FAILURE,
             ),
@@ -368,7 +393,7 @@ def cmd_fit(args: argparse.Namespace) -> int:
                 "package": capabilities["package"],
                 "version": capabilities["version"],
             },
-            parameters=fit_result.parameters,
+            parameters={**fit_result.parameters, "basis": _basis_parameters(validation_result)},
             outputs=["validation.json", "fit.json", "triangle.json"],
             exit_code=exit_code,
         ),
