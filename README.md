@@ -94,8 +94,10 @@ sensitivities instead.
 
 ## Verifiability
 
-- **Against the literature**: the hero dataset is the RAA triangle from Mack (1993).
-  Development factors and standard errors are checked against the published paper —
+- **Against the literature**: the hero dataset is the RAA triangle from
+  Mack (1994, CAS Spring Forum) — commonly misattributed to Mack (1993), which is
+  a separate paper (the GenIns/Taylor–Ashe triangle's source, also bundled here).
+  Development factors and standard errors are checked against the published papers —
   see [VALIDATION.md](VALIDATION.md).
 - **Against reality**: the CAS Loss Reserve Database (`clrd`) sample includes
   subsequently observed outcomes, enabling `reserve backtest` (roadmap).

@@ -5,8 +5,8 @@ determined by the text is stopped on and asked rather than resolved silently.
 Each item below has a proposed default. **Status: Q1–Q3 confirmed by Ivan
 Perincic 2026-07-02 — all proposed defaults approved as written. Q2 and Q3
 are now codified as normative text in `docs/cli-spec.md` v0.1.1 (see its
-changelog); Q1 remains a design decision recorded here only, since it does
-not change any command's documented input/output contract.**
+changelog); Q1's shared-folder consequence (`diagnostics` needing `--out`
+to find a `fit` run written under a custom root) is now codified in v0.1.3.**
 
 ## Q1. Do `diagnostics` and `sensitivity` write into the *same* run folder as
 the `fit` they operate on, or mint a new run_id each time?

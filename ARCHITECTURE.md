@@ -6,7 +6,7 @@
 actuarial-agent-harness/
 ├── README.md
 ├── CLAUDE.md                     # agent constitution (repo root — auto-loaded)
-├── VALIDATION.md                 # manual check vs Mack (1993) & Taylor–Ashe
+├── VALIDATION.md                 # manual check vs Mack (1993, 1994) & Taylor–Ashe
 ├── LICENSE
 ├── pyproject.toml                # pinned deps; entry point: reserve
 ├── demo.sh                       # Layer 2 headless demo (flawed triangle)
@@ -59,7 +59,7 @@ actuarial-agent-harness/
 │
 └── tests/
     ├── test_validation.py
-    ├── test_mack_vs_literature.py   # asserts RAA figures vs Mack (1993)
+    ├── test_mack_vs_literature.py   # asserts RAA vs Mack (1994) & GenIns vs Mack (1993)
     ├── test_flawed_triangles.py     # each injected flaw fires its expected flag
     └── test_manifest.py
 ```
@@ -108,6 +108,12 @@ Notes:
   `mack-diagnostics` skill — the agent selects narration, never invents it.
 - The reference `chainladder_adapter` implements `mack` at v1; `bf`, `capecod`,
   `bootstrap` are declared roadmap in `capabilities()`.
+- `EngineAdapter` has no `sensitivity()` method, deliberately. A sensitivity
+  grid is nothing but repeated calls to `fit()` with different parameters —
+  `harness/sensitivity.py` builds the perturbation grid and re-invokes
+  `fit()` once per scenario, entirely engine-agnostic. Every adapter gets
+  `reserve sensitivity` for free the moment `fit()` works; there is nothing
+  engine-specific to implement or swap for it.
 
 ## Manifest
 
