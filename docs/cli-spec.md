@@ -1,4 +1,4 @@
-# `reserve` CLI — command specification (v0.1.11, FROZEN)
+# `reserve` CLI — command specification (v0.1.12, FROZEN)
 
 Contract for Phase 2 implementation. Changes after freeze require a version bump
 and a note in this file's changelog.
@@ -18,7 +18,7 @@ and a note in this file's changelog.
 | Code | Meaning |
 |---|---|
 | 0 | Success, no flags |
-| 1 | Internal error (traceback logged to stderr) |
+| 1 | Internal error (traceback logged to stderr), or a structured `input_integrity_violation` from `diagnostics`/`sensitivity`'s audit replay (v0.1.12 — see the `diagnostics` section) |
 | 2 | Data validation failure — structured errors in output |
 | 3 | Success with model warnings — one or more assumption flags ≠ pass |
 | 4 | Usage error (bad arguments, unknown method, missing file) |
@@ -119,6 +119,15 @@ published 206 for RAA origin 1982) but is not "wrong" — both are legitimate
 statistical choices, and the persisted `fit.json` always states which one
 was used.
 
+**Input snapshot** (v0.1.12): `fit` copies the input triangle CSV into
+`runs/<run-id>/inputs/<original-filename>` before persisting anything else,
+verifies the copy's sha256 against the hash already computed at validate
+time, and records `"snapshot": "inputs/<filename>"` on the manifest's input
+entry. This happens on every run folder `fit` creates — a validate-first
+refusal and a basis-mismatch refusal included, not just a successful fit —
+since each is its own self-contained audit object. `--dry-run` writes
+nothing, snapshot included. See **Audit replay** under `diagnostics` for why.
+
 Output `fit.json`:
 ```json
 {
@@ -176,6 +185,27 @@ must be told where that folder lives if `fit` used a non-default `--out`.
 inconsistency between two commands sharing the same run-folder model, not
 a deliberate distinction.
 
+**Audit replay** (v0.1.12): `diagnostics` re-fits internally to run its
+assumption tests, which means re-reading the input triangle CSV. It replays
+**exclusively** from the run's own snapshot (`runs/<run-id>/inputs/`,
+written by `fit` — see the `fit` section) — never from the originally
+recorded path, which may since have moved, changed, or been deleted. Before
+any recompute, the snapshot's current sha256 is checked against the hash
+`fit` recorded in the manifest; on a mismatch, `diagnostics` exits 1 with a
+structured error instead of silently replaying against data that may not be
+what was actually fit:
+```json
+{"error": "input_integrity_violation",
+ "message": "input file at … does not match the sha256 recorded in this run's manifest — refusing to replay against data that may not be what was actually fit",
+ "path_checked": "…", "expected_sha256": "…", "actual_sha256": "…"}
+```
+Run folders minted before v0.1.12 have no `"snapshot"` key in their
+manifest's input entry; for these, `diagnostics` falls back to the
+originally recorded path, but only after the same check — that path's
+current sha256 must still match the manifest's recorded hash, or the same
+integrity error is raised. Either way, a run folder is never replayed
+against a file that doesn't match what was actually fit.
+
 Runs assumption tests against an existing fit. Tests for `mack` at v0.1:
 
 | test_id | What it tests (Mack 1993/1994) |
@@ -213,6 +243,14 @@ maps to fixed prose in the
 from this list, nothing else.
 
 ### `reserve sensitivity <run-id> [--grid default|FILE] [--exclude-origins …] [--exclude-valuations …] [--format] [--out]`
+
+**Audit replay** (v0.1.12): identical rule and mechanism as `diagnostics` —
+`sensitivity` also re-fits internally (once per scenario) and so also
+replays exclusively from the run's own snapshot, verifying its sha256
+against the manifest first and exiting 1 with the same structured
+`input_integrity_violation` error on mismatch, with the same legacy-folder
+fallback for run folders minted before v0.1.12. See `diagnostics`' "Audit
+replay" for the exact error shape.
 
 Re-runs the fit over a perturbation grid. `--grid default` =
 {drop oldest origin; drop latest diagonal; simple vs volume averaging;
@@ -475,3 +513,13 @@ agent can query them without reading this file):
   recognizes (and refuses, exit 4) a `--selections` flag, quoting that
   roadmap status rather than a generic argparse error. See the `fit` and
   `Roadmap` sections for the governance surface named per destination.
+- v0.1.12 (2026-07-03): audit replay hardened — runs are self-contained;
+  found by independent review. `fit` now copies the input triangle CSV into
+  `runs/<run-id>/inputs/` and records it on the manifest (`inputs[].snapshot`);
+  `diagnostics`/`sensitivity` replay exclusively from that snapshot, verifying
+  its sha256 against the manifest before any recompute and exiting 1 with a
+  structured `input_integrity_violation` error on mismatch, instead of
+  silently re-reading a path that may since have moved, changed, or been
+  deleted. Pre-v0.1.12 run folders (no `snapshot` key) fall back to the
+  originally recorded path under the same sha256 check. See the `fit` and
+  `diagnostics` sections.

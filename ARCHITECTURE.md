@@ -124,7 +124,7 @@ Written by every command that produces output, at `runs/<run-id>/manifest.json`:
   "run_id": "2026-07-02T14-31-08_raa_mack_a1b2c3",
   "created_utc": "2026-07-02T14:31:08Z",
   "command": "reserve fit examples/raa.csv --method mack",
-  "inputs": [{"path": "examples/raa.csv", "sha256": "…"}],
+  "inputs": [{"path": "examples/raa.csv", "sha256": "…", "snapshot": "inputs/raa.csv"}],
   "engine": {"adapter": "chainladder_adapter", "package": "chainladder", "version": "0.9.2"},
   "environment": {"python": "3.12.1", "harness_version": "0.1.0", "locked_deps_sha256": "…"},
   "parameters": {"method": "mack", "averaging": "volume", "tail": "none"},
@@ -135,3 +135,12 @@ Written by every command that produces output, at `runs/<run-id>/manifest.json`:
 
 `run_id` is deterministic in structure (timestamp + input tag + short hash) so the
 agent can cite it stably.
+
+`inputs[].snapshot` (v0.1.12, `fit`-written runs only): the run-folder-relative
+path to a copy of the input CSV made at fit time (`runs/<run-id>/inputs/`).
+`diagnostics`/`sensitivity` replay exclusively from this snapshot, verifying its
+sha256 against `inputs[].sha256` before any recompute — the run folder is a
+self-contained audit object, independent of the original file's path, mutation,
+or deletion after the fact. Run folders minted before v0.1.12 have no
+`snapshot` key; replay falls back to `inputs[].path` for those, under the same
+sha256 check (`docs/cli-spec.md`'s `diagnostics` section, "Audit replay").

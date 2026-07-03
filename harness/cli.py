@@ -263,6 +263,7 @@ def cmd_fit(args: argparse.Namespace) -> int:
                 outputs=["validation.json"],
                 exit_code=EXIT_VALIDATION_FAILURE,
             ),
+            snapshot_source=args.triangle_csv,
         )
         _log_run(run_id, args.out, args.dry_run, ["validation.json"])
         _print_payload(args.format, payload, lambda p: _render_validation_text(p, run_id))
@@ -308,6 +309,7 @@ def cmd_fit(args: argparse.Namespace) -> int:
                 outputs=["validation.json"],
                 exit_code=EXIT_VALIDATION_FAILURE,
             ),
+            snapshot_source=args.triangle_csv,
         )
         _log_run(run_id, args.out, args.dry_run, ["validation.json"])
         _print_payload(args.format, error_payload, lambda p: _render_basis_mismatch_text(p, run_id))
@@ -365,6 +367,7 @@ def cmd_fit(args: argparse.Namespace) -> int:
             outputs=["validation.json", "fit.json", "triangle.json"],
             exit_code=exit_code,
         ),
+        snapshot_source=args.triangle_csv,
     )
     _log_run(run_id, args.out, args.dry_run, ["validation.json", "fit.json", "triangle.json"])
     _print_payload(args.format, fit_payload, lambda p: _render_fit_text(p, run_id))
@@ -395,10 +398,110 @@ def _inputs_for(path: Path, sha256: str | None) -> list[dict]:
     return [{"path": str(path), "sha256": None}]
 
 
-def _write_run(*, run_id, out_root, dry_run, files: dict, manifest_kwargs) -> None:
+class InputIntegrityError(Exception):
+    """Raised when a run's replay input can't be trusted (v0.1.12) — either
+    the snapshot under runs/<run-id>/inputs/ or, for a pre-snapshot legacy
+    folder, the originally recorded path, has a sha256 that no longer
+    matches what the manifest recorded at fit time. Carries a structured
+    payload so cmd_diagnostics/cmd_sensitivity can print it like any other
+    structured error rather than a bare traceback.
+    """
+
+    def __init__(self, payload: dict):
+        super().__init__(payload["message"])
+        self.payload = payload
+
+
+def _snapshot_input(run_dir: Path, source_path: Path, expected_sha256: str) -> str:
+    """Copies the fitted input CSV into runs/<run-id>/inputs/ (v0.1.12) so
+    the run folder is self-contained: diagnostics/sensitivity replay never
+    again depends on the original file still existing, unmoved, unchanged.
+    Verifies the copy landed intact before recording it — a mismatch here
+    means the filesystem misbehaved mid-copy, not a normal operating
+    condition, so it's raised rather than swallowed. Returns the manifest's
+    "snapshot" value: the run-folder-relative path to the copy.
+    """
+    inputs_dir = run_dir / "inputs"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_path = inputs_dir / source_path.name
+    snapshot_path.write_bytes(Path(source_path).read_bytes())
+    copy_sha256 = manifest.sha256_file(snapshot_path)
+    if copy_sha256 != expected_sha256:
+        raise RuntimeError(
+            f"input snapshot integrity check failed immediately after copy: "
+            f"{source_path} -> {snapshot_path} (expected sha256 {expected_sha256}, got {copy_sha256})"
+        )
+    return f"inputs/{source_path.name}"
+
+
+def _resolve_replay_input(run_dir: Path, run_manifest: dict) -> Path:
+    """Resolves the triangle CSV diagnostics/sensitivity replay a fit
+    against (v0.1.12). Uses the run's own snapshot when the manifest
+    recorded one — never the originally recorded path, which may since have
+    moved, changed, or been deleted. Pre-snapshot (legacy) run folders fall
+    back to that recorded path, but only after the same check: either way,
+    the file's current sha256 must match the manifest's recorded hash
+    before any recompute runs against it, or an InputIntegrityError is
+    raised instead of silently replaying against different data than what
+    was actually fit.
+    """
+    input_entry = run_manifest["inputs"][0]
+    expected_sha256 = input_entry["sha256"]
+    snapshot_rel = input_entry.get("snapshot")
+    path = (run_dir / snapshot_rel) if snapshot_rel else Path(input_entry["path"])
+
+    if not path.is_file():
+        raise InputIntegrityError(
+            {
+                "error": "input_integrity_violation",
+                "message": (
+                    f"input file for replay not found at {path} — the run's audit trail "
+                    "cannot be trusted; has it moved or been deleted since the fit?"
+                ),
+                "path_checked": str(path),
+                "expected_sha256": expected_sha256,
+                "actual_sha256": None,
+            }
+        )
+    actual_sha256 = manifest.sha256_file(path)
+    if actual_sha256 != expected_sha256:
+        raise InputIntegrityError(
+            {
+                "error": "input_integrity_violation",
+                "message": (
+                    f"input file at {path} does not match the sha256 recorded in this run's "
+                    "manifest — refusing to replay against data that may not be what was "
+                    "actually fit"
+                ),
+                "path_checked": str(path),
+                "expected_sha256": expected_sha256,
+                "actual_sha256": actual_sha256,
+            }
+        )
+    return path
+
+
+def _render_integrity_error_text(payload: dict, run_id: str) -> str:
+    return "\n".join(
+        [
+            f"run_id: {run_id}",
+            f"error: {payload['error']}",
+            f"message: {payload['message']}",
+            f"path_checked: {payload['path_checked']}",
+            f"expected_sha256: {payload['expected_sha256']}",
+            f"actual_sha256: {payload['actual_sha256']}",
+        ]
+    )
+
+
+def _write_run(*, run_id, out_root, dry_run, files: dict, manifest_kwargs, snapshot_source: Path | None = None) -> None:
     if dry_run:
         return
     run_dir = runs.create_run_dir(run_id, out_root=out_root)
+    if snapshot_source is not None:
+        input_entry = manifest_kwargs["inputs"][0]
+        if input_entry.get("sha256"):
+            input_entry["snapshot"] = _snapshot_input(run_dir, snapshot_source, input_entry["sha256"])
     for filename, payload in files.items():
         (run_dir / filename).write_text(_dump_json(payload) + "\n")
     m = manifest.build_manifest(run_id=run_id, **manifest_kwargs)
@@ -459,7 +562,12 @@ def cmd_diagnostics(args: argparse.Namespace) -> int:
         return EXIT_USAGE_ERROR
 
     fit_payload = json.loads((run_dir / "fit.json").read_text())
-    triangle_csv = Path(run_manifest["inputs"][0]["path"])
+    try:
+        triangle_csv = _resolve_replay_input(run_dir, run_manifest)
+    except InputIntegrityError as exc:
+        print(f"run_id: {args.run_id}", file=sys.stderr)
+        _print_payload(args.format, exc.payload, lambda p: _render_integrity_error_text(p, args.run_id))
+        return EXIT_INTERNAL_ERROR
 
     adapter = ChainladderAdapter()
     tri_handle = adapter.load_triangle(triangle_csv)
@@ -528,7 +636,12 @@ def cmd_sensitivity(args: argparse.Namespace) -> int:
         return EXIT_USAGE_ERROR
 
     fit_payload = json.loads((run_dir / "fit.json").read_text())
-    triangle_csv = Path(run_manifest["inputs"][0]["path"])
+    try:
+        triangle_csv = _resolve_replay_input(run_dir, run_manifest)
+    except InputIntegrityError as exc:
+        print(f"run_id: {args.run_id}", file=sys.stderr)
+        _print_payload(args.format, exc.payload, lambda p: _render_integrity_error_text(p, args.run_id))
+        return EXIT_INTERNAL_ERROR
     base_params = dict(fit_payload["parameters"])
 
     # --exclude-origins/--exclude-valuations here layer onto every grid
