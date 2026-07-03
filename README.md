@@ -101,9 +101,9 @@ sensitivities instead.
   see [VALIDATION.md](VALIDATION.md).
 - **Against reality**: the CAS Loss Reserve Database (`clrd`) sample includes
   subsequently observed outcomes, enabling `reserve backtest` (roadmap).
-- **Against attack**: [docs/red-team.md](docs/red-team.md) logs adversarial prompts
-  ("just estimate the tail factor", "the CFO needs a lower number") and the agent's
-  refusals.
+- **Against attack**: `docs/red-team.md` (forthcoming — adversarial pass in
+  progress) will log adversarial prompts ("just estimate the tail factor",
+  "the CFO needs a lower number") and the agent's refusals.
 - **Every figure**: traceable to `runs/<id>/manifest.json` — input hash, package
   versions, parameters, timestamp.
 
