@@ -53,7 +53,12 @@ def test_diagnostics_raa_base_case_shared_manifest_and_exit_code(tmp_path):
 
     run_dir = tmp_path / run_id
     manifest_payload = json.loads((run_dir / "manifest.json").read_text())
-    assert manifest_payload["outputs"] == ["fit.json", "diagnostics.json"]
+    assert manifest_payload["outputs"] == [
+        "validation.json",
+        "fit.json",
+        "triangle.json",
+        "diagnostics.json",
+    ]
     assert manifest_payload["exit_code"] == diag_result.returncode
     assert manifest_payload["command"].startswith("reserve fit")  # provenance untouched
 

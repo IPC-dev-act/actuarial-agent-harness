@@ -1,4 +1,4 @@
-# `reserve` CLI — command specification (v0.1.7, FROZEN)
+# `reserve` CLI — command specification (v0.1.9, FROZEN)
 
 Contract for Phase 2 implementation. Changes after freeze require a version bump
 and a note in this file's changelog.
@@ -82,6 +82,15 @@ as the standalone `validate` command's output) and `manifest.json`
 `fit.json` is written. A failed `fit` call is auditable the same way a
 failed standalone `validate` call is (v0.1.1).
 
+`validation.json` is now persisted on **every** successful `fit` too, not
+just a failed one (v0.1.9 — previously `validation.json` and `fit.json`
+never coexisted in one run folder). Needed so a rendered report can
+highlight warn-class cells (`monotone_cumulative`, `nonneg_incrementals`)
+against the actual triangle grid: those checks don't block a fit, so
+without this change their details were computed in memory and then
+discarded, with nothing on disk to reference. `outputs` for a successful
+fit is now `["validation.json", "fit.json", "triangle.json"]`.
+
 `--sigma-interpolation` (v0.1.7): controls how the `mack` method
 extrapolates sigma for the last development period, where Mack's recursive
 formula is otherwise undefined for lack of a second data point. Default
@@ -111,6 +120,30 @@ Output `fit.json`:
   "totals": {"latest": 160987.0, "ultimate": 213122.2,
               "ibnr": 52135.2, "mack_se": 26909.0},
   "units": "as-input"
+}
+```
+
+Output `triangle.json` (v0.1.9): the full origin × development grid — every
+input (actual) cell plus every projected (lower-triangle) cell, cumulative,
+full precision, bounded to the input triangle's own development range (a
+tail beyond it is not represented here — see `fit.json: totals`/`by_origin`
+for a tail-inclusive ultimate). `dev` is the same 1-indexed rank as
+`development_factors`' `from_dev`/`to_dev`, not a raw age or valuation
+year. Projected cells are reconstructed harness-side by applying `fit.json`'s
+own `development_factors` LDFs forward from each origin's last actual
+value — the same numbers `fit()` already returned, not re-derived from the
+engine (engine-agnostic, like `sensitivity`). A projected cell is `null`
+(never fabricated) if any LDF needed to reach it is itself undefined
+(v0.1.5's null-as-undefined convention) — e.g. an aggressive
+`--exclude-origins` leaving some transition inestimable.
+```json
+{
+  "run_id": "…",
+  "basis": "cumulative",
+  "cells": [
+    {"origin": "1981", "dev": 1, "value": 5012.0, "type": "actual"},
+    {"origin": "1990", "dev": 2, "value": 6187.676897704888, "type": "projected"}
+  ]
 }
 ```
 All floats at full precision; rounding is a rendering concern. Exit: 0, or 3 if
@@ -216,9 +249,76 @@ verdict.
 
 Deterministic renderer over the run folder's JSON. **Reads only `runs/<run-id>/`;
 takes no numeric arguments** — there is no way to inject a figure through this
-command. Emits `report.html` with governance footer: run_id, input sha256,
-engine + version, harness version, timestamp. Exit 0 · 4 if run folder
-incomplete.
+command. No LLM call and no network access — every number on the page is read
+directly from `manifest.json`/`validation.json`/`fit.json`/`diagnostics.json`/
+`sensitivity.json`; the last two are read if present, otherwise that section
+states plainly they haven't been run rather than fabricating content.
+`--format-out md` is declared but not yet implemented (exit 4) — v0.1 only
+requires `html`.
+
+**Section structure** (v0.1.8): 0 Scope & basis of preparation, 1 Executive
+summary, 2 Data & validation, 3 Method & parameters, 4 Results, 5 Diagnostics,
+6 Sensitivity, 7 Limitations & reliances, 8 Governance — exactly
+`.claude/skills/reserving-report/SKILL.md`'s structure. Diagnostics tests
+render with a pass/warn badge (visual and textual, not color-only) and the
+fixed narration keyed by `narrative_key` — the same prose as the
+`mack-diagnostics` skill, necessarily duplicated as plain data here since
+this renderer has no LLM in the loop to read the skill's markdown.
+
+**Null-as-undefined** (v0.1.8): any `null` result field (a total, a
+by-origin reserve/std-err, a sensitivity scenario/range value, or a
+development factor left inestimable by an exclusion) renders as the literal
+word "undefined" with a note that it is not zero — never as `0` and never
+as a blank cell. This is distinct from a `null` that has an ordinary,
+non-alarming meaning as a *parameter* (`parameters.n_periods: null` meaning
+"all periods"; a fixed tail's `development_factors[].sigma: null` meaning
+"not applicable, no distribution") — those render as their plain meaning,
+not as "undefined."
+
+**Traceability** (v0.1.8): every rendered figure is wrapped with a hover
+title attribute naming its exact source field (e.g.
+`fit.json: totals.ibnr`) — inline, native HTML, no JavaScript.
+
+**Self-contained** (v0.1.8): single HTML file, inline CSS, no external
+assets (fonts, scripts, images) of any kind — must render fully offline.
+Print-formatted for A4 (`@page` rules; tables and diagnostic blocks avoid
+breaking across a page boundary) since review packs are expected to be
+archived as PDFs.
+
+**Visuals** (v0.1.9), all pure HTML/CSS — no `<script>`, no SVG/canvas:
+- **Development-triangle grid** (§4, from `triangle.json`): the full
+  origin × dev grid, actual cells on the plain surface, projected cells on
+  a light tint (secondary encoding: also italicized, not color-alone). The
+  latest diagonal (the actual/projected boundary) is outlined, not filled —
+  a structural marker, not a value encoding. Any cell named in a
+  `validation.json` warn-class check's `details` (`monotone_cumulative`,
+  `nonneg_incrementals`) gets the status "warning" color plus a superscript
+  footnote marker, with the explanation below the grid — the visible label
+  is the required relief channel for a warning-level color that sits below
+  3:1 contrast by itself.
+- **Per-origin IBNR bars with ±1 SE whiskers** (§4): one bar per origin,
+  single series (the sequential blue ramp, one hue), value labelled past
+  the bar's end so it's never clipped; the whisker is omitted (not
+  zero-length) for a `null` `mack_se`, consistent with null-as-undefined.
+- **Sensitivity min–base–max strip** (§6, from `sensitivity.json: range`):
+  a single horizontal track, a wash spanning min→max, a marker at base. If
+  every scenario and the base are non-finite, the strip is replaced with a
+  plain "range unavailable" note rather than drawing an empty track.
+- **`tabular-nums`** throughout every column of numbers (grid cells, table
+  cells, bar/whisker/strip labels) so digits align vertically — proportional
+  figures are for prose, not columns.
+- Status/sequential colors are the fixed, pre-validated steps from the
+  house palette, not eyeballed — see the palette reference the renderer's
+  CSS comments point to.
+
+**Governance footer** (unchanged from v0.1): `run_id`, input `sha256`,
+`engine.package`/`engine.version`, `environment.harness_version`,
+`created_utc` — read verbatim from `manifest.json`, not recomposed.
+
+Exit 0 · 4 if the run folder is incomplete for reporting (folder doesn't
+exist, or is missing `manifest.json`/`fit.json` — the two files every
+section other than Diagnostics/Sensitivity depends on) · 4 for
+`--format-out md` until it exists.
 
 ### `reserve runs [list|show <run-id>] [--format] [--out]`
 
@@ -297,3 +397,27 @@ methods `bf`, `capecod`, `bootstrap` · portfolio mode (multi-segment + roll-up)
   exactly, replacing chainladder's own library default (`log-linear`),
   which understates SE for origins that depend most on the extrapolated
   final-period sigma. See the `fit` section.
+- v0.1.8 (2026-07-03): `reserve report` implemented (Phase 5) —
+  deterministic HTML renderer, `harness/render/report_html.py` +
+  `harness/render/templates/report.html`. Spells out what the original v0.1
+  text left unstated: the section structure (0–8, matching
+  `.claude/skills/reserving-report/SKILL.md` exactly), the null-as-undefined
+  rendering convention (and its exception for parameter fields where `null`
+  has an ordinary meaning), the fixed-narration duplication rationale (no
+  LLM in this renderer's loop, so the same prose as `mack-diagnostics`
+  exists as plain Python data here too), the hover-title traceability
+  mechanism, and the self-contained/print-A4 requirement. `--format-out md`
+  is declared in the signature but exits 4 (not yet implemented) — scope
+  reduced to `html` only for this phase; flagging that as a deliberate cut,
+  not an oversight. See the `report` section.
+- v0.1.9 (2026-07-03): `fit` additionally writes `triangle.json` (the full
+  origin × dev grid, actual + projected, cumulative, full precision) and
+  now always persists `validation.json` too, not just on failure — needed
+  so the renderer can highlight warn-class cells against the actual grid,
+  since a warn (unlike a fail) doesn't block a fit and its details would
+  otherwise never reach disk. `reserve report` gains three CSS-only visuals
+  (development-triangle grid with actual/projected shading and warn-cell
+  footnotes, per-origin IBNR bars with ±1 SE whiskers, a sensitivity
+  min–base–max strip), `tabular-nums` on every numeric column, and
+  print-color-adjust so the new shading survives PDF export. See the `fit`
+  and `report` sections.

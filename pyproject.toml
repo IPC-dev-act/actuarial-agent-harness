@@ -23,4 +23,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["harness", "engine"]
+packages = ["harness", "harness.render", "engine"]
+
+[tool.setuptools.package-data]
+"harness.render" = ["templates/*.html"]

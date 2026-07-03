@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__REPORT_TITLE__</title>
+<style>
+  /* Status and sequential colors are the fixed, pre-validated steps from
+     the house data-viz palette (dataviz skill, references/palette.md —
+     "Status palette", "Sequential hue") — not eyeballed. Status is a small
+     fixed scale with reserved meaning, always paired with a visible label
+     (never color-alone); the sequential blue ramp is for the one-series
+     IBNR bars and the actual/projected triangle-grid shading. */
+  :root {
+    --ink: #0b0b0b;
+    --muted: #52514e;
+    --faint: #898781;
+    --rule: #e1e0d9;
+    --surface: #fcfcfb;
+
+    --good: #0ca30c;
+    --good-bg: #eaf6ea;
+    --warning: #fab219;
+    --warning-bg: #fdf1d9;
+    --critical: #d03b3b;
+    --critical-bg: #fbe6e6;
+
+    --seq-100: #cde2fb;   /* lightest step — "projected" wash, near-zero */
+    --seq-250: #86b6ef;
+    --seq-450: #2a78d6;   /* the one series hue: IBNR bars */
+    --seq-600: #184f95;
+
+    --undefined-bg: #f2f2f2;
+    --undefined-border: #888;
+  }
+  * { box-sizing: border-box; }
+  /* print-color-adjust: without this, browsers strip background colors
+     when printing to save ink by default — the actual/projected shading,
+     warn highlights, and bar fills would vanish from an archived PDF. */
+  * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  body {
+    font-family: Georgia, "Times New Roman", serif;
+    color: var(--ink);
+    max-width: 840px;
+    margin: 2.5rem auto;
+    padding: 0 1.5rem;
+    line-height: 1.55;
+    font-size: 16px;
+  }
+  h1, h2, h3, .label, .badge, .source, .footer, table, .toc,
+  .triangle-grid, .bar-chart, .range-strip {
+    font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 0.2rem; }
+  h2 {
+    font-size: 1.15rem;
+    margin-top: 2.2rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 2px solid var(--ink);
+  }
+  h3 { font-size: 1rem; margin-top: 1.3rem; }
+  .subtitle { color: var(--muted); margin-top: 0; }
+  .source {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin: -0.6rem 0 0.8rem 0;
+  }
+  .fig {
+    border-bottom: 1px dotted #888;
+    cursor: help;
+    font-variant-numeric: tabular-nums;
+  }
+  .fig.undefined {
+    font-style: italic;
+    color: var(--muted);
+    background: var(--undefined-bg);
+    border-bottom: 1px dotted var(--undefined-border);
+    padding: 0 0.2em;
+  }
+  .note {
+    background: var(--undefined-bg);
+    border-left: 3px solid var(--undefined-border);
+    padding: 0.6rem 0.9rem;
+    margin: 0.8rem 0;
+    font-size: 0.92rem;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.8rem 0 1.2rem 0;
+    font-size: 0.92rem;
+  }
+  th, td {
+    border-bottom: 1px solid var(--rule);
+    padding: 0.35rem 0.6rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    border-bottom: 2px solid var(--ink);
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-variant-numeric: normal;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.55rem;
+    border-radius: 3px;
+    border: 1.5px solid;
+  }
+  .badge.pass { background: var(--good-bg); border-color: var(--good); color: #0a4a0a; }
+  .badge.warn { background: var(--warning-bg); border-color: var(--warning); color: #6b4400; }
+  .badge.fail { background: var(--critical-bg); border-color: var(--critical); color: #7a1414; }
+  .test-block {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 0.7rem 1rem;
+    margin: 0.7rem 0;
+    break-inside: avoid;
+  }
+  .test-block .stat { color: var(--muted); font-size: 0.85rem; margin: 0.3rem 0; font-variant-numeric: tabular-nums; }
+  .actions { font-size: 0.88rem; margin-top: 0.4rem; }
+  .actions code { background: #f2f2f2; padding: 0.05rem 0.3rem; border-radius: 2px; }
+  ul.plain { padding-left: 1.2rem; }
+
+  /* --- development-triangle grid ------------------------------------ */
+  .triangle-wrap { overflow-x: auto; margin: 0.8rem 0 0.4rem 0; }
+  table.triangle-grid { width: auto; min-width: 100%; font-size: 0.82rem; }
+  table.triangle-grid th, table.triangle-grid td {
+    text-align: right;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  table.triangle-grid th:first-child, table.triangle-grid td:first-child { text-align: left; }
+  table.triangle-grid td.actual { background: var(--surface); }
+  table.triangle-grid td.projected {
+    background: var(--seq-100);
+    font-style: italic;
+    color: var(--muted);
+  }
+  table.triangle-grid td.diagonal { border: 2px solid var(--ink); }
+  table.triangle-grid td.warn-cell {
+    background: var(--warning-bg);
+    border: 1.5px solid var(--warning);
+  }
+  .footnote-marker {
+    font-weight: 700;
+    color: #6b4400;
+    margin-left: 0.15em;
+  }
+  ol.footnotes { font-size: 0.85rem; color: var(--muted); padding-left: 1.3rem; margin-top: 0.6rem; }
+  .legend-key { font-size: 0.82rem; color: var(--muted); margin: 0.4rem 0 0 0; }
+  .legend-key .swatch {
+    display: inline-block;
+    width: 0.85em; height: 0.85em;
+    border: 1px solid var(--rule);
+    vertical-align: -0.1em;
+    margin-right: 0.3em;
+  }
+  .legend-key .swatch.projected { background: var(--seq-100); }
+  .legend-key .swatch.warn { background: var(--warning-bg); border-color: var(--warning); }
+  .legend-key .swatch.diagonal { background: var(--surface); border: 2px solid var(--ink); }
+
+  /* --- per-origin IBNR bars with SE whiskers ------------------------- */
+  .bar-chart { margin: 0.8rem 0 1rem 0; }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 4.2rem 1fr 6.5rem;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.55rem 0;
+    break-inside: avoid;
+  }
+  .bar-row .bar-label { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar-track { position: relative; height: 1rem; }
+  .bar-fill {
+    position: absolute;
+    left: 0; top: 0.15rem;
+    height: 0.7rem;
+    background: var(--seq-450);
+    border-radius: 0 3px 3px 0;
+  }
+  .bar-whisker {
+    position: absolute;
+    top: 0.5rem;
+    height: 2px;
+    background: var(--muted);
+  }
+  .bar-whisker::before, .bar-whisker::after {
+    content: "";
+    position: absolute;
+    top: -0.3rem;
+    width: 2px;
+    height: 0.6rem;
+    background: var(--muted);
+  }
+  .bar-whisker::before { left: 0; }
+  .bar-whisker::after { right: 0; }
+  .bar-value { font-size: 0.85rem; text-align: right; }
+  .bar-value.undefined { font-style: italic; color: var(--muted); }
+
+  /* --- sensitivity min-base-max strip --------------------------------- */
+  .range-strip { margin: 0.9rem 0; }
+  .range-track {
+    position: relative;
+    height: 0.5rem;
+    background: var(--rule);
+    border-radius: 3px;
+    margin: 1.1rem 0.5rem;
+  }
+  .range-wash {
+    position: absolute;
+    top: 0; height: 100%;
+    background: var(--seq-450);
+    opacity: 0.18;
+    border-radius: 3px;
+  }
+  .range-marker {
+    position: absolute;
+    top: 50%;
+    width: 0.85rem; height: 0.85rem;
+    background: var(--seq-450);
+    border: 2px solid var(--surface);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .footer {
+    margin-top: 2.5rem;
+    padding-top: 1rem;
+    border-top: 2px solid var(--ink);
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .footer dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 1rem; margin: 0; }
+  .footer dt { font-weight: 600; }
+  .footer dd { margin: 0; word-break: break-all; font-variant-numeric: tabular-nums; }
+  .disclaimer {
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-style: italic;
+  }
+  @media print {
+    @page { size: A4; margin: 2cm; }
+    body { margin: 0; max-width: none; font-size: 12.5pt; }
+    h2 { break-after: avoid; }
+    .test-block, table, .footer, .bar-row, .range-strip { break-inside: avoid; }
+    .fig { cursor: default; }
+    table.triangle-grid { font-size: 8.5pt; }
+  }
+</style>
+</head>
+<body>
+__REPORT_BODY__
+</body>
+</html>

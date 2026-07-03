@@ -143,7 +143,12 @@ def test_cli_sensitivity_raa_base_case(tmp_path):
 
     run_dir = tmp_path / run_id
     manifest_payload = json.loads((run_dir / "manifest.json").read_text())
-    assert manifest_payload["outputs"] == ["fit.json", "sensitivity.json"]
+    assert manifest_payload["outputs"] == [
+        "validation.json",
+        "fit.json",
+        "triangle.json",
+        "sensitivity.json",
+    ]
     assert manifest_payload["exit_code"] == 0
 
 

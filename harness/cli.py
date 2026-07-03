@@ -17,7 +17,8 @@ import sys
 from pathlib import Path
 
 from engine.chainladder_adapter import ChainladderAdapter, parse_tail_param
-from harness import manifest, runs, sensitivity, validation
+from harness import manifest, runs, sensitivity, triangle_io, triangle_projection, validation
+from harness.render import report_html
 from harness.runs import RunNotFoundError
 
 EXIT_SUCCESS = 0
@@ -134,6 +135,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_format_arg(p_runs_show)
     _add_out_arg(p_runs_show)
     p_runs_show.set_defaults(handler=cmd_runs_show)
+
+    p_report = subparsers.add_parser("report", help="Render a deterministic HTML review of an existing run")
+    p_report.add_argument("run_id")
+    p_report.add_argument("--format-out", choices=["html", "md"], default="html")
+    _add_out_arg(p_report)
+    p_report.set_defaults(handler=cmd_report)
 
     return parser
 
@@ -255,12 +262,32 @@ def cmd_fit(args: argparse.Namespace) -> int:
     fit_warnings = _detect_fit_warnings(fit_result)
     exit_code = EXIT_MODEL_WARNING if fit_warnings else EXIT_SUCCESS
 
-    payload = fit_result.to_fit_json(run_id)
+    fit_payload = fit_result.to_fit_json(run_id)
+
+    # triangle.json (v0.1.9): actual cells straight from the input CSV
+    # (independent re-read via harness.triangle_io, same as validate's own
+    # parse — engine-agnostic, no chainladder) plus projected cells
+    # reconstructed from fit.json's own development_factors LDFs.
+    actual_cells, _triangle_error = triangle_io.load_and_normalize(args.triangle_csv)
+    triangle_payload = {
+        "run_id": run_id,
+        "basis": tri_handle.basis,
+        "cells": triangle_projection.build_cells(
+            actual_cells.to_dict("records"), fit_result.development_factors
+        ),
+    }
+
+    validation_payload = validation_result.to_dict()
+
     _write_run(
         run_id=run_id,
         out_root=args.out,
         dry_run=args.dry_run,
-        files={"fit.json": payload},
+        files={
+            "validation.json": validation_payload,
+            "fit.json": fit_payload,
+            "triangle.json": triangle_payload,
+        },
         manifest_kwargs=dict(
             command=_invocation_string("fit", args),
             inputs=_inputs_for(args.triangle_csv, validation_result.input_sha256),
@@ -270,12 +297,12 @@ def cmd_fit(args: argparse.Namespace) -> int:
                 "version": capabilities["version"],
             },
             parameters=fit_result.parameters,
-            outputs=["fit.json"],
+            outputs=["validation.json", "fit.json", "triangle.json"],
             exit_code=exit_code,
         ),
     )
-    _log_run(run_id, args.out, args.dry_run, ["fit.json"])
-    _print_payload(args.format, payload, lambda p: _render_fit_text(p, run_id))
+    _log_run(run_id, args.out, args.dry_run, ["validation.json", "fit.json", "triangle.json"])
+    _print_payload(args.format, fit_payload, lambda p: _render_fit_text(p, run_id))
     return exit_code
 
 
@@ -550,6 +577,35 @@ def _render_runs_show_text(payload: dict) -> str:
         f"exit_code:   {payload['exit_code']}",
     ]
     return "\n".join(lines)
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    if args.format_out == "md":
+        print("usage error: --format-out md is not implemented yet (only 'html')", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    run_dir = runs.run_dir_path(args.run_id, out_root=args.out)
+    incomplete_reason = report_html.check_complete(run_dir)
+    if incomplete_reason is not None:
+        print(f"usage error: {incomplete_reason}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    html_text = report_html.render(args.run_id, run_dir)
+    report_path = run_dir / "report.html"
+    report_path.write_text(html_text)
+
+    # Append to outputs without disturbing exit_code — report is a
+    # rendering step over an already-assessed run, not a new assessment;
+    # overwriting exit_code here would erase a genuine warning from
+    # diagnostics/sensitivity the way update_manifest's normal contract
+    # (used by those commands) is meant to reflect the latest *assessment*.
+    current = manifest.read_manifest(run_dir)
+    manifest.update_manifest(run_dir, add_outputs=["report.html"], exit_code=current["exit_code"])
+
+    print(f"run_id: {args.run_id}", file=sys.stderr)
+    print(f"wrote {report_path}", file=sys.stderr)
+    print(str(report_path))
+    return EXIT_SUCCESS
 
 
 def main(argv: list[str] | None = None) -> int:

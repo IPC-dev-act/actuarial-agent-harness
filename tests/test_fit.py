@@ -193,7 +193,10 @@ def test_cli_fit_raa_exit_0_matches_totals(tmp_path):
     assert len(run_dirs) == 1
     run_dir = run_dirs[0]
     assert (run_dir / "fit.json").is_file()
-    assert not (run_dir / "validation.json").exists()
+    # v0.1.9: fit always persists validation.json now (previously fail-only)
+    # — needed so the report renderer can highlight warn-class cells.
+    assert (run_dir / "validation.json").is_file()
+    assert (run_dir / "triangle.json").is_file()
     manifest_payload = json.loads((run_dir / "manifest.json").read_text())
     assert manifest_payload["exit_code"] == 0
     assert manifest_payload["engine"] == {
