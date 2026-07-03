@@ -206,6 +206,18 @@ def _render_validation_text(payload: dict, run_id: str) -> str:
     return "\n".join(lines)
 
 
+def _render_basis_mismatch_text(payload: dict, run_id: str) -> str:
+    return "\n".join(
+        [
+            f"run_id: {run_id}",
+            f"error: {payload['error']}",
+            f"message: {payload['message']}",
+            f"adapter_supported_basis: {payload['adapter_supported_basis']}",
+            f"inferred_basis: {payload['inferred_basis']}",
+        ]
+    )
+
+
 def cmd_fit(args: argparse.Namespace) -> int:
     try:
         tail = parse_tail_param(args.tail)
@@ -247,6 +259,41 @@ def cmd_fit(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return EXIT_USAGE_ERROR
+
+    if validation_result.basis not in capabilities["basis"]:
+        # docs/cli-spec.md v0.1.10: the adapter's load_triangle has always
+        # hardcoded cumulative=True — this closes the silent-fabrication
+        # path that would otherwise fit genuinely incremental input as if
+        # it were cumulative. Persists the same audit trail as a validate
+        # failure (Q2 convention: validation.json + manifest, exit 2, no
+        # fit.json), even though validate's own verdict was pass/warn — the
+        # refusal is about adapter capability, not a structural data defect.
+        error_payload = {
+            "error": "unsupported_basis",
+            "message": (
+                f"engine adapter supports {' or '.join(capabilities['basis'])} "
+                f"input only; inferred basis: {validation_result.basis}"
+            ),
+            "adapter_supported_basis": capabilities["basis"],
+            "inferred_basis": validation_result.basis,
+        }
+        _write_run(
+            run_id=run_id,
+            out_root=args.out,
+            dry_run=args.dry_run,
+            files={"validation.json": validation_result.to_dict()},
+            manifest_kwargs=dict(
+                command=_invocation_string("fit", args),
+                inputs=_inputs_for(args.triangle_csv, validation_result.input_sha256),
+                engine=None,
+                parameters={},
+                outputs=["validation.json"],
+                exit_code=EXIT_VALIDATION_FAILURE,
+            ),
+        )
+        _log_run(run_id, args.out, args.dry_run, ["validation.json"])
+        _print_payload(args.format, error_payload, lambda p: _render_basis_mismatch_text(p, run_id))
+        return EXIT_VALIDATION_FAILURE
 
     params = {
         "averaging": args.averaging,

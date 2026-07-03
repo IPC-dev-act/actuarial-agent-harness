@@ -98,6 +98,46 @@ def make_calendar_effect(frame: pd.DataFrame, shock_valuation: int, factor: floa
     return frame
 
 
+def make_incremental(seed: int = SEED + 1) -> pd.DataFrame:
+    """A genuinely incremental triangle — each cell is a fresh per-period
+    payment amount (front-loaded, decaying), not a running cumulative
+    total. docs/cli-spec.md v0.1.10: the adapter only declares support for
+    cumulative input; this fixture is what a `reserve fit` refusal
+    (unsupported_basis, exit 2) should look like against real data, not a
+    contrived one-cell edge case. Ground truth is asserted in main() via
+    the harness's own basis inference, not just asserted by construction.
+    """
+    rng = np.random.default_rng(seed)
+    origin_years = [FIRST_ORIGIN_YEAR + i for i in range(N_ORIGINS)]
+    base_payment = 8_000 * (1.05 ** np.arange(N_ORIGINS)) * rng.uniform(0.9, 1.1, N_ORIGINS)
+    decay = [0.55, 0.5, 0.45, 0.4, 0.35, 0.3, 0.28]  # 7 steps -> 8 dev periods, same shape as _base_triangle
+
+    rows = []
+    for i, origin in enumerate(origin_years):
+        incremental = base_payment[i] * rng.uniform(0.9, 1.1)
+        rows.append((origin, origin, incremental))
+        remaining = incremental
+        for k, d in enumerate(decay):
+            remaining = remaining * d * rng.uniform(0.95, 1.05)
+            dev_year = origin + k + 1
+            rows.append((origin, dev_year, remaining))
+
+    frame = pd.DataFrame(rows, columns=["origin", "development", "value"])
+    max_valuation = max(origin_years)
+    frame = frame[frame["development"] <= max_valuation].reset_index(drop=True)
+    frame["value"] = frame["value"].round(1)
+
+    for _origin, group in frame.groupby("origin"):
+        values = group.sort_values("development")["value"].tolist()
+        if len(values) >= 2:
+            assert values[-1] < values[0], (
+                "incremental fixture must decay (last period's payment < first) "
+                "so the harness's first-vs-last basis heuristic votes 'incremental', "
+                "not 'cumulative', for every origin"
+            )
+    return frame
+
+
 def main() -> None:
     EXAMPLES_DIR.mkdir(exist_ok=True)
     base = _base_triangle()
@@ -113,7 +153,22 @@ def main() -> None:
     calendar_path = EXAMPLES_DIR / "triangle_calendar_effect.csv"
     make_calendar_effect(base, shock_valuation).to_csv(calendar_path, index=False)
 
-    for path in (gapped_path, nonmonotone_path, calendar_path):
+    incremental_path = EXAMPLES_DIR / "triangle_incremental.csv"
+    make_incremental().to_csv(incremental_path, index=False)
+
+    # Ground truth: the harness's OWN basis inference must agree this is
+    # incremental — not just asserted by construction above. Imported here
+    # (not at module level) since this is the one check that needs the
+    # harness itself; scripts/ may depend on harness/, unlike the reverse.
+    from harness.validation import validate_triangle_csv
+
+    result = validate_triangle_csv(incremental_path)
+    assert result.basis == "incremental", (
+        f"triangle_incremental.csv ground-truth check failed: harness inferred "
+        f"basis={result.basis!r}, expected 'incremental'"
+    )
+
+    for path in (gapped_path, nonmonotone_path, calendar_path, incremental_path):
         print(f"wrote {path}")
 
 

@@ -24,6 +24,13 @@ from engine.base import (
 ADAPTER_NAME = "chainladder_adapter"
 METHODS = ["mack"]
 ROADMAP_METHODS = ["bf", "capecod", "bootstrap"]
+# load_triangle() has always hardcoded cumulative=True regardless of what
+# the input actually is — a silent-fabrication risk if a genuinely
+# incremental triangle were ever fit as if it were cumulative. Declaring it
+# here makes the limitation explicit and checkable rather than implicit
+# adapter behavior nobody can query (see cli.py's basis-mismatch check in
+# cmd_fit, docs/cli-spec.md v0.1.10).
+SUPPORTED_BASIS = ["cumulative"]
 DIAGNOSTIC_TESTS = [
     "dev_correlation",
     "calendar_year_effect",
@@ -53,6 +60,7 @@ class ChainladderAdapter(EngineAdapter):
             "methods": list(METHODS),
             "roadmap_methods": list(ROADMAP_METHODS),
             "diagnostics": list(DIAGNOSTIC_TESTS),
+            "basis": list(SUPPORTED_BASIS),
         }
 
     def load_triangle(self, path: Path) -> TriangleHandle:

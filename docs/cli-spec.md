@@ -1,4 +1,4 @@
-# `reserve` CLI — command specification (v0.1.9, FROZEN)
+# `reserve` CLI — command specification (v0.1.10, FROZEN)
 
 Contract for Phase 2 implementation. Changes after freeze require a version bump
 and a note in this file's changelog.
@@ -74,6 +74,23 @@ Exit: 0 all pass or warn-only (verdicts stay visible) · 2 any fail
 Runs validate first (hard rule); refuses with exit 2 if validation fails.
 Dispatches to the engine adapter. `--method` values outside adapter
 `capabilities()` ⇒ exit 4.
+
+**Basis mismatch** (v0.1.10): `capabilities()` now declares `"basis":
+["cumulative"]` — the adapter's `load_triangle` has always hardcoded
+cumulative handling, previously an undeclared, silent limitation. If
+`validate`'s inferred basis (`validation.json: basis`) isn't in that list,
+`fit` refuses with exit 2, printing a structured error instead of the
+`validate` output:
+```json
+{"error": "unsupported_basis",
+ "message": "engine adapter supports cumulative input only; inferred basis: incremental",
+ "adapter_supported_basis": ["cumulative"], "inferred_basis": "incremental"}
+```
+The run folder still persists `validation.json` + `manifest.json`
+(`exit_code: 2`, `outputs: ["validation.json"]`, no `fit.json`) — same
+storage convention as any other validate-first refusal (v0.1.1), even
+though `validate`'s own verdict was pass/warn: the refusal is about
+declared adapter capability, not a structural defect in the data.
 
 `fit` mints its `run_id`/folder before validating. If the internal
 validate-first check fails, it still persists `validation.json` (same shape
@@ -421,3 +438,13 @@ methods `bf`, `capecod`, `bootstrap` · portfolio mode (multi-segment + roll-up)
   min–base–max strip), `tabular-nums` on every numeric column, and
   print-color-adjust so the new shading survives PDF export. See the `fit`
   and `report` sections.
+- v0.1.10 (2026-07-03): closes a silent-fabrication path — the adapter's
+  `load_triangle` has always hardcoded cumulative handling regardless of
+  what `validate` actually infers. `capabilities()` now declares `"basis":
+  ["cumulative"]`; `fit` checks the inferred basis against it and refuses
+  with exit 2 and a structured `unsupported_basis` error on mismatch,
+  rather than silently fitting incremental data as if it were cumulative.
+  `examples/triangle_incremental.csv` added as the reference fixture
+  (`scripts/make_flawed_triangles.py`), its "genuinely incremental" ground
+  truth asserted via the harness's own basis inference, not just by
+  construction. See the `fit` section.
