@@ -50,6 +50,16 @@ def test_capabilities_declares_mack_only_and_roadmap():
     assert set(caps["roadmap_methods"]) == {"bf", "capecod", "bootstrap"}
     assert caps["package"] == "chainladder"
     assert caps["adapter"] == "chainladder_adapter"
+    assert caps["basis"] == ["cumulative"]
+
+
+def test_capabilities_roadmap_map_declares_ungoverned_destinations():
+    caps = ChainladderAdapter().capabilities()
+    roadmap = caps["roadmap"]
+    assert set(roadmap) == {"bf", "capecod", "bootstrap", "selections", "ifrs17_bridge"}
+    for destination, status in roadmap.items():
+        assert status.startswith("declared, not governed"), destination
+    assert "judgment inputs require governance schema" in roadmap["selections"]
 
 
 def test_load_triangle_valuation_year_convention():
@@ -230,6 +240,25 @@ def test_cli_fit_unsupported_method_exit_4_no_run_persisted(tmp_path):
         "fit", str(RAA_CSV), "--method", "bf", "--format", "json", "--out", str(tmp_path)
     )
     assert result.returncode == 4
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_cli_fit_selections_rejected_exit_4_quotes_roadmap_status_no_run_persisted(tmp_path):
+    result = _run_cli(
+        "fit",
+        str(RAA_CSV),
+        "--method",
+        "mack",
+        "--selections",
+        "some_file.json",
+        "--format",
+        "json",
+        "--out",
+        str(tmp_path),
+    )
+    assert result.returncode == 4
+    assert "not implemented" in result.stderr
+    assert "judgment inputs require governance schema" in result.stderr
     assert list(tmp_path.iterdir()) == []
 
 

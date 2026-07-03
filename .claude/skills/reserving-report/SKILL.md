@@ -52,6 +52,16 @@ cited) or "the reserve looks adequate" (an opinion this harness doesn't offer
 4. **Results** — development factors and by-origin/total reserves and
    standard errors, from `fit.json`. State `units: "as-input"` explicitly;
    never rescale or round beyond what's asked.
+4a. **Selected vs indicated** *(reserved — renders only when a selections
+   input exists in the run; `selections` is currently roadmap, "declared,
+   not governed" — see `docs/cli-spec.md`'s Roadmap section)*. Per
+   development period: the indicated factor, the selected factor, the
+   deviation between them, the recorded rationale for that deviation, and
+   the aggregate impact of all selections on ultimates. A selection without
+   a recorded rationale for every deviation isn't auditable — don't narrate
+   one from a future run as if it were (CLAUDE.md rule 1 applies to a
+   selection file's rationale field exactly as it does to any other cited
+   figure).
 5. **Diagnostics** — every test's verdict, narrated per `mack-diagnostics`'
    fixed language; if `overall` is `warn`, the prescribed actions considered
    and (if run) their results, before any headline figure is presented as

@@ -50,6 +50,20 @@ SIGMA_INTERPOLATION_CHOICES = ["mack", "log-linear"]
 # the other is wrong, and leaves it overridable via --sigma-interpolation.
 DEFAULT_SIGMA_INTERPOLATION = "mack"
 
+# Roadmap surfacing only (docs/cli-spec.md v0.1.11) — no new functionality.
+# Broader than ROADMAP_METHODS (alternative *fitting* methods only):
+# "selections" and "ifrs17_bridge" aren't fit methods, they're workflow/
+# reporting destinations this harness doesn't implement yet. Naming them
+# here, with their governance status, is the whole point — declaring a gap
+# is different from leaving it undiscoverable.
+ROADMAP = {
+    "bf": "declared, not governed",
+    "capecod": "declared, not governed",
+    "bootstrap": "declared, not governed",
+    "selections": "declared, not governed — judgment inputs require governance schema",
+    "ifrs17_bridge": "declared, not governed",
+}
+
 
 class ChainladderAdapter(EngineAdapter):
     def capabilities(self) -> dict:
@@ -61,6 +75,7 @@ class ChainladderAdapter(EngineAdapter):
             "roadmap_methods": list(ROADMAP_METHODS),
             "diagnostics": list(DIAGNOSTIC_TESTS),
             "basis": list(SUPPORTED_BASIS),
+            "roadmap": dict(ROADMAP),
         }
 
     def load_triangle(self, path: Path) -> TriangleHandle:

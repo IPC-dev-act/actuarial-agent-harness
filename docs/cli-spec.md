@@ -1,4 +1,4 @@
-# `reserve` CLI — command specification (v0.1.10, FROZEN)
+# `reserve` CLI — command specification (v0.1.11, FROZEN)
 
 Contract for Phase 2 implementation. Changes after freeze require a version bump
 and a note in this file's changelog.
@@ -353,6 +353,26 @@ unknown run-id is a usage error (exit 4), same as `diagnostics`/
 `reserve backtest` (CLRD upper-triangle fit vs realised outcomes) ·
 methods `bf`, `capecod`, `bootstrap` · portfolio mode (multi-segment + roll-up).
 
+**Governance surface per destination** (v0.1.11 — declared here, not
+implemented; `capabilities()["roadmap"]` carries the same statuses so an
+agent can query them without reading this file):
+- **`selections`** (judgment overriding a computed factor): a declared
+  selection file with a per-deviation rationale, hashed into the manifest —
+  a selection is only auditable if the reason for every deviation from the
+  indicated factor is itself a recorded, traceable input.
+- **`bf`/`capecod`** (a priori-driven methods): the a priori itself as a
+  declared input with provenance — an expected loss ratio or on-level
+  premium is a judgment input the same way a selection is, and needs the
+  same "where did this number come from" trail.
+- **`bootstrap`**: a distribution output schema (not a point estimate) plus
+  the random seed recorded in the manifest — a stochastic method is only
+  reproducible if the seed is itself part of the audit trail.
+- **`ifrs17_bridge`**: discounting and payment-pattern assumptions as
+  declared inputs, the risk adjustment derived from the stochastic output
+  rather than picked, and confidence-level traceability end to end — an
+  IFRS 17 figure inherits every governance requirement of the reserve it's
+  built from, plus its own.
+
 ## Changelog
 
 - v0.1 (2026-07-02): initial freeze.
@@ -448,3 +468,10 @@ methods `bf`, `capecod`, `bootstrap` · portfolio mode (multi-segment + roll-up)
   (`scripts/make_flawed_triangles.py`), its "genuinely incremental" ground
   truth asserted via the harness's own basis inference, not just by
   construction. See the `fit` section.
+- v0.1.11 (2026-07-03): roadmap surfacing only — no new functionality.
+  `capabilities()` gains a `"roadmap"` map (`bf`, `capecod`, `bootstrap`,
+  `selections`, `ifrs17_bridge`), each "declared, not governed"; `selections`
+  additionally notes "judgment inputs require governance schema". `fit`
+  recognizes (and refuses, exit 4) a `--selections` flag, quoting that
+  roadmap status rather than a generic argparse error. See the `fit` and
+  `Roadmap` sections for the governance surface named per destination.

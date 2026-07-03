@@ -44,7 +44,10 @@ failure**. It says "there isn't enough data left to estimate this parameter
 under this exclusion," not "the chain ladder is broken" or "something
 crashed." Name which parameter went undefined and why (which origin, which
 transition) — don't report the scenario as failed, and don't drop it from the
-review.
+review. This is the same underlying gap a governed tail assumption (roadmap —
+`docs/cli-spec.md`'s `bf`/`capecod` a priori, currently "declared, not
+governed") would eventually need to fill responsibly, rather than leave
+undefined.
 
 **Required rule**: `null` in any `totals` field means the quantity is
 **undefined — never report or treat it as zero**. This is a hard distinction

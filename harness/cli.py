@@ -100,6 +100,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["mack", "log-linear"],
         default="mack",
     )
+    # Not a supported feature (docs/cli-spec.md roadmap: "selections" is
+    # declared, not governed) — recognized here only so cmd_fit can give a
+    # specific, informative rejection instead of argparse's generic
+    # "unrecognized arguments" error.
+    p_fit.add_argument("--selections", default=None)
     _add_format_arg(p_fit)
     _add_out_arg(p_fit)
     p_fit.add_argument("--dry-run", action="store_true")
@@ -219,6 +224,19 @@ def _render_basis_mismatch_text(payload: dict, run_id: str) -> str:
 
 
 def cmd_fit(args: argparse.Namespace) -> int:
+    if args.selections is not None:
+        # Roadmap surfacing, not a feature (docs/cli-spec.md v0.1.11): a
+        # pure usage rejection, checked before anything data-dependent —
+        # quotes the declared roadmap status rather than a generic
+        # argparse error, so the reason it's refused is legible.
+        roadmap_status = ChainladderAdapter().capabilities()["roadmap"]["selections"]
+        print(
+            f"usage error: --selections is not implemented — roadmap status: "
+            f"{roadmap_status}",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE_ERROR
+
     try:
         tail = parse_tail_param(args.tail)
     except ValueError as exc:
