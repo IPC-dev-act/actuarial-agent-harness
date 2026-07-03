@@ -7,7 +7,7 @@ name = "actuarial-agent-harness"
 version = "0.1.0"
 description = "A production harness for AI agents operating actuarial models."
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 dependencies = [
     "chainladder==0.9.2",
     "pandas==2.3.3",
@@ -23,7 +23,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["harness", "harness.render", "engine"]
+packages = ["harness", "harness.render", "harness.render.templates", "engine"]
 
 [tool.setuptools.package-data]
-"harness.render" = ["templates/*.html"]
+"harness.render.templates" = ["*.html"]
