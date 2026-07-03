@@ -71,7 +71,20 @@ class _ArgumentParser(argparse.ArgumentParser):
     triangle is bad" and try to act on structured validation errors that
     were never produced. Applies to every subcommand — passed as
     parser_class to every add_subparsers() call below.
+
+    `allow_abbrev=False`: argparse's default prefix-abbreviation matching
+    let a stale `reserve report --format html` silently succeed as an alias
+    for `--format-out`, since `report` has no separate `--format` flag of
+    its own and `--format` is an unambiguous prefix of `--format-out` —
+    undermining the exact reason `--format-out` exists as a distinct flag
+    (docs/cli-spec.md's `report` section, "Why `--format-out`, not
+    `--format`"). Found re-verifying README commands verbatim against this
+    CLI.
     """
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("allow_abbrev", False)
+        super().__init__(*args, **kwargs)
 
     def error(self, message):
         self.print_usage(sys.stderr)

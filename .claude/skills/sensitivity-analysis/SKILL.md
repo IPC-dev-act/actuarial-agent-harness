@@ -60,13 +60,14 @@ any other aggregate — the engine's own `range` computation already excludes
 non-finite scenarios from the min/max rather than corrupting them; do the
 same in prose (state the null plainly, don't paper over it).
 
-> **DRAFT — flag for your review:** I'm confident in the mechanical
-> distinction above (null = undefined, 0.0 = analytically zero, never
-> conflated) since it's exactly the bug this session found and fixed. I'm
-> less sure what a reviewing actuary's *preferred phrasing* is for
-> "data-thinness finding" in a client-facing sense — I used the term you gave
-> me in the brief; treat everything after that phrase as my own filler, not
-> settled house style.
+> **Scope note:** Narration in this reference implementation is deliberately
+> factual-only; causal interpretation of warnings is reserved for the
+> reviewing actuary. The mechanical distinction above (`null` = undefined,
+> `0.0` = analytically zero, never conflated) is a hard rule this skill
+> enforces; "data-thinness finding" itself is a factual description of what
+> the exclusion did to the data, not a causal or client-facing judgment —
+> anything beyond that framing is the reviewing actuary's call, not this
+> skill's.
 
 ## What NOT to do
 

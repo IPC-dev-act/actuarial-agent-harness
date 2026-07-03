@@ -59,7 +59,7 @@ cd actuarial-agent-harness
 pip install -e .
 reserve validate examples/raa.csv
 reserve fit examples/raa.csv --method mack --out runs/
-reserve report <run-id> --format html
+reserve report <run-id> --format-out html
 ```
 
 Pure Python. Inspect the deterministic engine first; confirm the numbers come from
@@ -125,7 +125,7 @@ pathologies. No client data of any kind.
 
 - Layer 0: Python ≥ 3.10
 - Layers 1–2: [Claude Code](https://docs.claude.com/en/docs/claude-code/overview)
-  — tested with version `<X.Y>` <!-- [PERO: pin after testing] -->
+  — tested with version `2.1.198`
 
 ## Credits & license
 
@@ -133,7 +133,7 @@ Built on [chainladder-python](https://github.com/casact/chainladder-python)
 (MPL-2.0) by John Bogaardt, Kenneth Hsu and the CAS Open-Source Projects Working
 Group. This repository: MIT.
 
-Built by **Ivan Perincic** — [IP Consulting](https://www.linkedin.com/in/YOUR-HANDLE),
+Built by **Ivan Perincic** — IP Consulting ([FILL]),
 Paris. 15+ years in life insurance capital and cash-flow modelling
 (Prophet, Tyche, Solvency II, IFRS 17). Questions and ideas: LinkedIn,
-<your@email>, or open an issue — PRs welcome.
+[FILL], or open an issue — PRs welcome.

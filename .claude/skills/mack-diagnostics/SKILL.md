@@ -63,14 +63,15 @@ screen's threshold relative to its own column's average."
 unusually far from its column's average — one origin's development is
 disproportionately driving that period's factor."
 
-> **DRAFT — flag for your review:** the `_warn` lines above state the
-> statistical fact only. I initially drafted illustrative "plausible causes"
-> for each (e.g. cy_effect → "a claims process change, a large settlement, a
-> reserving exercise, an inflation shock"; residual_pattern_origin → "changing
-> business mix or reserving philosophy by underwriting year") and pulled them
-> back out — inventing specific real-world causes is actuarial judgment I'm
-> not confident enough to hand you as fixed prose. Add them back if you want
-> that texture, but as your own language, not mine.
+> **Scope note:** Narration in this reference implementation is deliberately
+> factual-only; causal interpretation of warnings is reserved for the
+> reviewing actuary. The `_warn` lines above state the statistical fact
+> only — no illustrative "plausible causes" (a claims process change, a
+> large settlement, a reserving exercise, an inflation shock, a change in
+> business mix or reserving philosophy by underwriting year, and so on).
+> Naming a specific real-world cause is actuarial judgment this harness
+> doesn't offer; that step belongs to the human reviewing the output, not
+> to fixed prose recited by an agent.
 
 `prescribed_actions` come from the adapter, not from this skill — recite them
 as given, with placeholders (`<run-id>`, `<flagged-origin>`) filled from

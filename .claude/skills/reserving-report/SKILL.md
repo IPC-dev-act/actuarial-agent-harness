@@ -5,15 +5,16 @@ description: Review-pack structure and the citation rule for every quantitative 
 
 # Reserving report
 
-`reserve report` (the deterministic HTML/MD renderer) is **not yet built**
-(Phase 5). Until it exists, this skill defines the structure your own
-commentary should follow when assembling a review by hand (e.g. a `/review`
-walkthrough chaining `validate` → `fit` → `diagnostics` → `sensitivity`) — and
-the structure the eventual renderer should target. The section layout below is
-**my proposed structure, not a certified format** — flag it for whatever house
-style you actually want; I have no basis for what a reviewing actuary expects
-a review pack to look like beyond "organize by the pipeline stage that
-produced each piece."
+`reserve report <run-id> --format-out html` (`harness/render/report_html.py`,
+implemented since v0.1.8) is the deterministic HTML renderer — it produces
+every quantitative section below directly from `runs/<run-id>/`'s own JSON,
+with no LLM in its loop. This skill governs two things: the structure the
+renderer implements (below — matched exactly, section for section), and the
+*commentary* you write alongside it, since the renderer has no narrative
+judgment of its own. Use it both ways: to read a rendered report (know what
+each section is drawing from and why) and to write the prose that goes
+around it, whether that's `/report`'s commentary pass over an existing
+render or a `/review` walkthrough narrating the same pipeline as it runs.
 
 ## The one rule everything else follows
 
@@ -28,7 +29,7 @@ Incorrect: "Total IBNR is roughly 52,000" (rounded without saying so, and not
 cited) or "the reserve looks adequate" (an opinion this harness doesn't offer
 — see Scope, below).
 
-## Proposed section structure
+## Section structure
 
 0. **Scope & basis of preparation** — what this review covers (the specific
    input triangle, method, and run(s) cited — nothing broader) and the basis
