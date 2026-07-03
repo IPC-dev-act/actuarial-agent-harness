@@ -175,7 +175,7 @@ engine (engine-agnostic, like `sensitivity`). A projected cell is `null`
 All floats at full precision; rounding is a rendering concern. Exit: 0, or 3 if
 the engine emits fit-time warnings.
 
-### `reserve diagnostics <run-id> [--format] [--out]`
+### `reserve diagnostics <run-id> [--format] [--out] [--dry-run]`
 
 `--out` (v0.1.3): the runs root to locate `<run-id>` under (default
 `./runs`) — needed because `diagnostics` amends an existing `fit` run's
@@ -184,6 +184,16 @@ must be told where that folder lives if `fit` used a non-default `--out`.
 `sensitivity` already had this flag in v0.1; its absence here was an
 inconsistency between two commands sharing the same run-folder model, not
 a deliberate distinction.
+
+`--dry-run` (v0.1.12): computes and prints `diagnostics.json` exactly as a
+normal run would (`--format json`/`text` both work identically), but writes
+nothing — `diagnostics.json` is not created and the run's manifest is not
+amended. Exit code is unaffected: still 0 (`overall: pass`) or 3
+(`overall: warn`), computed the same way regardless of `--dry-run`; a dry
+run previews the *write*, not the assessment. Contract alignment: the
+Global section has always said "`--dry-run` on any writing command", but
+only `fit` had it wired in through v0.1.11 — `diagnostics` write to
+`runs/` exactly as `fit` does and were missing it by oversight, not design.
 
 **Audit replay** (v0.1.12): `diagnostics` re-fits internally to run its
 assumption tests, which means re-reading the input triangle CSV. It replays
@@ -242,7 +252,7 @@ maps to fixed prose in the
 `mack-diagnostics` skill; `prescribed_actions` is the agent's menu — it proposes
 from this list, nothing else.
 
-### `reserve sensitivity <run-id> [--grid default|FILE] [--exclude-origins …] [--exclude-valuations …] [--format] [--out]`
+### `reserve sensitivity <run-id> [--grid default|FILE] [--exclude-origins …] [--exclude-valuations …] [--format] [--out] [--dry-run]`
 
 **Audit replay** (v0.1.12): identical rule and mechanism as `diagnostics` —
 `sensitivity` also re-fits internally (once per scenario) and so also
@@ -251,6 +261,11 @@ against the manifest first and exiting 1 with the same structured
 `input_integrity_violation` error on mismatch, with the same legacy-folder
 fallback for run folders minted before v0.1.12. See `diagnostics`' "Audit
 replay" for the exact error shape.
+
+`--dry-run` (v0.1.12): same contract as `diagnostics`' — the full grid is
+still computed and printed, `sensitivity.json` is not written and the
+manifest is not amended. Exit code is unaffected (always 0, `sensitivity`
+never carries a verdict of its own).
 
 Re-runs the fit over a perturbation grid. `--grid default` =
 {drop oldest origin; drop latest diagonal; simple vs volume averaging;
@@ -300,7 +315,7 @@ sensitivity output is descriptive; interpretation language lives in the
 `sensitivity-analysis` skill, and no output shape here should be read as a
 verdict.
 
-### `reserve report <run-id> [--format-out html|md] [--out]`
+### `reserve report <run-id> [--format-out html|md] [--out] [--dry-run]`
 
 Deterministic renderer over the run folder's JSON. **Reads only `runs/<run-id>/`;
 takes no numeric arguments** — there is no way to inject a figure through this
@@ -310,6 +325,24 @@ directly from `manifest.json`/`validation.json`/`fit.json`/`diagnostics.json`/
 states plainly they haven't been run rather than fabricating content.
 `--format-out md` is declared but not yet implemented (exit 4) — v0.1 only
 requires `html`.
+
+**Why `--format-out`, not `--format`** (v0.1.12 — spec text corrected to
+match the implementation, which has used `--format-out` since Phase 5/
+v0.1.8): every other command's `--format` selects `json|text`, the
+*encoding* of the same structured payload on stdout. `report`'s own flag
+selects a fundamentally different axis — which *document* to produce
+(`html` vs `md`), not how to encode one. Reusing `--format` for both would
+silently overload one flag with two unrelated meanings depending which
+command it's given to; `--format-out` keeps the axes separate. This is a
+naming correction to this file only — `report` never actually accepted
+`--format`, and no code changes accompany this entry.
+
+`--dry-run` (v0.1.12): renders the HTML in memory and still prints the
+would-be `report.html` path to stdout (the "intended action"), but writes
+neither the file nor the manifest update. Contract alignment, same as
+`diagnostics`/`sensitivity` above — `report` writes to `runs/` exactly like
+every other command in this table and was missing `--dry-run` by
+oversight, not design.
 
 **Section structure** (v0.1.8): 0 Scope & basis of preparation, 1 Executive
 summary, 2 Data & validation, 3 Method & parameters, 4 Results, 5 Diagnostics,
@@ -523,3 +556,18 @@ agent can query them without reading this file):
   deleted. Pre-v0.1.12 run folders (no `snapshot` key) fall back to the
   originally recorded path under the same sha256 check. See the `fit` and
   `diagnostics` sections.
+  - Contract alignment, same review pass: `--dry-run` extended to
+    `diagnostics`, `sensitivity`, and `report`, closing a gap against the
+    Global section's own rule ("`--dry-run` on any writing command") — an
+    earlier phase had wired it into `fit` only. Each computes and prints its
+    normal output under `--dry-run`; only the write (and, where applicable,
+    the manifest update) is skipped. See each command's own section.
+  - `report`'s `--format-out` (in place since v0.1.8/Phase 5) is confirmed as
+    the correct flag name, not a deviation to fix: this file's `report`
+    section text is corrected to make that explicit, since it had never
+    stated the rationale for departing from every other command's `--format`.
+    `--format` means output *encoding* (`json|text`) everywhere it appears;
+    `report` selects a document *format* (`html|md`), a different axis —
+    collapsing both onto one flag would silently overload its meaning by
+    command. No behavior changes here, only this file's own text. See the
+    `report` section.

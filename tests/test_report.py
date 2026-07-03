@@ -359,3 +359,22 @@ def test_cli_report_success_writes_file_updates_manifest_preserves_exit_code(tmp
     # report is a rendering step, not a new assessment — must not clobber
     # the exit_code diagnostics already set (this run should be 3, a warn).
     assert manifest_after["exit_code"] == manifest_before["exit_code"]
+
+
+def test_cli_report_dry_run_writes_nothing(tmp_path):
+    fit_result = _run_cli(
+        "fit", str(RAA_CSV), "--method", "mack", "--format", "json", "--out", str(tmp_path)
+    )
+    run_id = json.loads(fit_result.stdout)["run_id"]
+    run_dir = tmp_path / run_id
+    manifest_before = json.loads((run_dir / "manifest.json").read_text())
+
+    result = _run_cli("report", run_id, "--out", str(tmp_path), "--dry-run")
+    assert result.returncode == 0, result.stderr
+    report_path = run_dir / "report.html"
+    assert not report_path.exists()
+    assert result.stdout.strip() == str(report_path)  # intended path, still announced
+    assert "[dry-run] would write" in result.stderr
+
+    manifest_after = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest_after == manifest_before

@@ -1,11 +1,13 @@
 """`reserve` CLI — parsing, exit codes, dispatch (docs/cli-spec.md).
 
-Flag policy is per-command, taken literally from each command's signature in
-docs/cli-spec.md rather than applied blanket across every writing command:
-`--format` and `--out` are added wherever a command's signature lists them;
-`--dry-run` only where the signature explicitly lists it (`fit` only, as of
-v0.1.3 — `validate`/`diagnostics`/`sensitivity` also write to runs/ but
-don't have it).
+`--format` and `--out` are added wherever a command's signature lists them.
+`--dry-run` is on every writing command's *signature* as of v0.1.12 — `fit`,
+`diagnostics`, `sensitivity`, `report` — per the Global section's own rule
+("`--dry-run` on any writing command"); an earlier phase had wired it into
+`fit` only, on a too-literal reading of each command's individual v0.1
+signature rather than that global rule. `validate` remains the one writing
+command without it, matching its own signature in docs/cli-spec.md, which
+has never listed `--dry-run` — left as-is here rather than guessed at.
 """
 
 from __future__ import annotations
@@ -114,6 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_diag.add_argument("run_id")
     _add_format_arg(p_diag)
     _add_out_arg(p_diag)
+    p_diag.add_argument("--dry-run", action="store_true")
     p_diag.set_defaults(handler=cmd_diagnostics)
 
     p_sens = subparsers.add_parser("sensitivity", help="Re-run a fit over a perturbation grid")
@@ -123,6 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_sens.add_argument("--exclude-valuations", default="")
     _add_format_arg(p_sens)
     _add_out_arg(p_sens)
+    p_sens.add_argument("--dry-run", action="store_true")
     p_sens.set_defaults(handler=cmd_sensitivity)
 
     p_runs = subparsers.add_parser("runs", help="Inventory of the runs root")
@@ -145,6 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("run_id")
     p_report.add_argument("--format-out", choices=["html", "md"], default="html")
     _add_out_arg(p_report)
+    p_report.add_argument("--dry-run", action="store_true")
     p_report.set_defaults(handler=cmd_report)
 
     return parser
@@ -579,11 +584,11 @@ def cmd_diagnostics(args: argparse.Namespace) -> int:
     payload = diag_result.to_diagnostics_json(args.run_id)
     exit_code = EXIT_MODEL_WARNING if diag_result.overall != "pass" else EXIT_SUCCESS
 
-    (run_dir / "diagnostics.json").write_text(_dump_json(payload) + "\n")
-    manifest.update_manifest(run_dir, add_outputs=["diagnostics.json"], exit_code=exit_code)
+    if not args.dry_run:
+        (run_dir / "diagnostics.json").write_text(_dump_json(payload) + "\n")
+        manifest.update_manifest(run_dir, add_outputs=["diagnostics.json"], exit_code=exit_code)
 
-    print(f"run_id: {args.run_id}", file=sys.stderr)
-    print(f"wrote {run_dir / 'diagnostics.json'}", file=sys.stderr)
+    _log_run(args.run_id, args.out, args.dry_run, ["diagnostics.json"])
     _print_payload(args.format, payload, lambda p: _render_diagnostics_text(p, args.run_id))
     return exit_code
 
@@ -689,11 +694,11 @@ def cmd_sensitivity(args: argparse.Namespace) -> int:
         "range": sensitivity.compute_range(base_ibnr, scenario_ibnr_values),
     }
 
-    (run_dir / "sensitivity.json").write_text(_dump_json(payload) + "\n")
-    manifest.update_manifest(run_dir, add_outputs=["sensitivity.json"], exit_code=EXIT_SUCCESS)
+    if not args.dry_run:
+        (run_dir / "sensitivity.json").write_text(_dump_json(payload) + "\n")
+        manifest.update_manifest(run_dir, add_outputs=["sensitivity.json"], exit_code=EXIT_SUCCESS)
 
-    print(f"run_id: {args.run_id}", file=sys.stderr)
-    print(f"wrote {run_dir / 'sensitivity.json'}", file=sys.stderr)
+    _log_run(args.run_id, args.out, args.dry_run, ["sensitivity.json"])
     _print_payload(args.format, payload, lambda p: _render_sensitivity_text(p, args.run_id))
     return EXIT_SUCCESS
 
@@ -770,18 +775,18 @@ def cmd_report(args: argparse.Namespace) -> int:
 
     html_text = report_html.render(args.run_id, run_dir)
     report_path = run_dir / "report.html"
-    report_path.write_text(html_text)
 
-    # Append to outputs without disturbing exit_code — report is a
-    # rendering step over an already-assessed run, not a new assessment;
-    # overwriting exit_code here would erase a genuine warning from
-    # diagnostics/sensitivity the way update_manifest's normal contract
-    # (used by those commands) is meant to reflect the latest *assessment*.
-    current = manifest.read_manifest(run_dir)
-    manifest.update_manifest(run_dir, add_outputs=["report.html"], exit_code=current["exit_code"])
+    if not args.dry_run:
+        report_path.write_text(html_text)
+        # Append to outputs without disturbing exit_code — report is a
+        # rendering step over an already-assessed run, not a new assessment;
+        # overwriting exit_code here would erase a genuine warning from
+        # diagnostics/sensitivity the way update_manifest's normal contract
+        # (used by those commands) is meant to reflect the latest *assessment*.
+        current = manifest.read_manifest(run_dir)
+        manifest.update_manifest(run_dir, add_outputs=["report.html"], exit_code=current["exit_code"])
 
-    print(f"run_id: {args.run_id}", file=sys.stderr)
-    print(f"wrote {report_path}", file=sys.stderr)
+    _log_run(args.run_id, args.out, args.dry_run, ["report.html"])
     print(str(report_path))
     return EXIT_SUCCESS
 

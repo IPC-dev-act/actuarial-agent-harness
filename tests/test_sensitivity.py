@@ -171,6 +171,27 @@ def test_cli_sensitivity_non_finite_scenario_serializes_as_null_not_exit_3(tmp_p
     assert drop_oldest["totals"]["mack_se"] is None
 
 
+def test_cli_sensitivity_dry_run_writes_nothing_but_still_shows_result(tmp_path):
+    fit_result = _run_cli(
+        "fit", str(RAA_CSV), "--method", "mack", "--format", "json", "--out", str(tmp_path)
+    )
+    run_id = json.loads(fit_result.stdout)["run_id"]
+    run_dir = tmp_path / run_id
+    manifest_before = json.loads((run_dir / "manifest.json").read_text())
+
+    result = _run_cli(
+        "sensitivity", run_id, "--format", "json", "--out", str(tmp_path), "--dry-run"
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert len(payload["scenarios"]) == 8
+    assert not (run_dir / "sensitivity.json").exists()
+    assert "[dry-run] would write" in result.stderr
+
+    manifest_after = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest_after == manifest_before
+
+
 def test_cli_sensitivity_exclude_origins_layers_onto_every_scenario(tmp_path):
     fit_result = _run_cli(
         "fit", str(RAA_CSV), "--method", "mack", "--format", "json", "--out", str(tmp_path)
