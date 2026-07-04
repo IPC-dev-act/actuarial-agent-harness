@@ -2,6 +2,13 @@
 runs/*
 !runs/README.md
 
+# Demo-recording pipeline outputs (scripts/record_demo/) — the pipeline
+# itself is versioned, its renders are not.
+scripts/record_demo/*.cast
+scripts/record_demo/*.mp4
+scripts/record_demo/*.gif
+scripts/record_demo/*.webm
+
 # Python
 __pycache__/
 *.py[cod]
