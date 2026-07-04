@@ -166,7 +166,6 @@ Built on [chainladder-python](https://github.com/casact/chainladder-python)
 (MPL-2.0) by John Bogaardt, Kenneth Hsu and the CAS Open-Source Projects Working
 Group. This repository: MIT.
 
-Built by **Ivan Perincic** — IP Consulting ([FILL]),
-Paris. 15+ years in life insurance capital and cash-flow modelling
-(Prophet, Tyche, Solvency II, IFRS 17). Questions and ideas: LinkedIn,
-[FILL], or open an issue — PRs welcome.
+Built by **Ivan Perincic** — IP Consulting. Questions and ideas:
+[LinkedIn](https://www.linkedin.com/in/ivan-perincic-ab271366/), [FILL], or
+open an issue — PRs welcome.
