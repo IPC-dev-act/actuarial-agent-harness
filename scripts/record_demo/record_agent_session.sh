@@ -31,6 +31,16 @@
 # time it runs (a full /review pipeline plus a follow-up turn). It must
 # never run as part of the test suite or CI — it is a manual, opt-in
 # recording step only, invoked directly or via `make demo`.
+#
+# TIMEOUT WARNING: a full /review run (validate -> fit -> diagnostics ->
+# sensitivity if flagged -> report, all inside one agent turn) takes well
+# over two minutes of wall clock. Do not run this script under any
+# subprocess/CI timeout wrapper with a short deadline — it will be killed
+# mid-turn, after real API calls have already been made and billed, without
+# producing a usable recording (this happened once during development of
+# this pipeline: a 2-minute wrapper killed step 1 partway through, after
+# validate/fit/diagnostics/sensitivity had already run for real). If a
+# wrapper is unavoidable, allow 15+ minutes.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"

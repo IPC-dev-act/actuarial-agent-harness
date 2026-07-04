@@ -54,12 +54,47 @@ python3 scripts/record_demo/record_report.py
 scripts/record_demo/assemble.sh
 ```
 
+## `make tape-sync`
+
+`demo.tape` hardcodes a run-id (vhs tapes are static text, so its
+`diagnostics`/`report` lines can't discover a run-id `fit` mints fresh on
+every invocation). Run this before rendering the tape, any time you
+suspect the baked-in id might be stale:
+
+```bash
+make tape-sync
+```
+
+This fits `examples/raa.csv` for real (`reserve fit`/`reserve report`/
+`reserve runs list` only — no `claude`, no recording tool, nothing billed),
+reads the run-id it just minted from `reserve runs list --format json`
+(sorted by run-id already, per `docs/cli-spec.md` — more robust than
+trusting filesystem mtime or scraping text with a regex), renders that
+run's report so `demo.tape`'s own report step has a real target, then
+rewrites every run-id-shaped string in `demo.tape` to match, via
+`scripts/record_demo/sync_tape_run_id.py`. It prints the id it injected.
+`demo.tape` never goes stale as a result — there's no manual copy-paste
+step and no risk of `diagnostics`/`report` exiting 4 against an old id.
+
 ## Billing warning
 
 `record_agent_session.sh` makes **two real, billed Claude API calls** every
 time it runs (a full `/review` pipeline, then a follow-up turn in the same
 session). It is a manual, opt-in recording step — never wire it into tests
 or CI, and don't run `make demo` casually.
+
+## Timeout warning
+
+A full `/review` run (validate -> fit -> diagnostics -> sensitivity if
+flagged -> report, all inside one agent turn) takes **well over two
+minutes** of wall clock. Do not run `record_agent_session.sh` — directly,
+via `make demo`, or via any other wrapper — under a subprocess or CI
+timeout with a short deadline. A wrapper that kills the process mid-turn
+does not just fail cleanly: it kills the call *after* real, billed API
+turns have already run, with nothing usable to show for it (this happened
+once during development of this pipeline — a 2-minute wrapper killed step
+1 partway through, after validate/fit/diagnostics/sensitivity had already
+executed for real). If a wrapper is unavoidable, allow **15+ minutes**.
 
 ## What's been verified vs. assumed
 
@@ -72,6 +107,11 @@ these scripts, rather than assumed:
   `demo.tape` narrates — real run-id baked into the tape (see its own header
   comment for the exact commands and the outcomes actually observed,
   including which diagnostics test warns and why).
+- `make tape-sync` itself — run for real, end to end, with a before/after
+  diff of `demo.tape` confirming exactly the two run-id occurrences changed
+  and nothing else, and a follow-up `reserve diagnostics` on the new run-id
+  confirming `outlier_link_ratios` still warns (exit 3) — RAA's own
+  diagnostics outcome doesn't depend on which run-id it landed under.
 - `claude -p --output-format json`'s JSON schema (a top-level `session_id`
   field, snake_case UUID) and `-r`/`--resume <session_id>` genuinely
   continuing the same session — verified against two real headless calls,
@@ -108,11 +148,9 @@ couldn't be exercised here.
    the normalised intermediate clips) and adjust the six numbers at the top
    of `assemble.sh` — nothing else in the script needs to change.
 
-A third, related manual step lives inside `demo.tape` itself, not this
-pipeline's other scripts: its hardcoded run-id goes stale the moment
-`reserve fit` is genuinely re-run (it mints a fresh id every time — see
-`harness/runs.py`'s `new_run_id`). Re-sync it per `demo.tape`'s own header
-comment after any re-render.
+`demo.tape`'s run-id used to be a third manual step (its hardcoded id goes
+stale the moment `reserve fit` is genuinely re-run — see `harness/runs.py`'s
+`new_run_id`) — that's now `make tape-sync`, above, not a manual edit.
 
 ## Outputs (gitignored)
 

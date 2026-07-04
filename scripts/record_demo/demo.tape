@@ -1,26 +1,20 @@
 # scripts/record_demo/demo.tape — Clip A (vhs), per docs/RECORDING-PLAN.md.
 # Render from the repo root: vhs scripts/record_demo/demo.tape
 #
-# The run-id below is hardcoded to a real one, produced by actually running
-# the sequence once before writing this tape (RECORDING-PLAN.md's own
-# documented workflow — vhs tapes are static text, so `diagnostics`/`report`
-# can't discover a run-id `fit` mints fresh on every invocation):
-#   reserve validate examples/raa.csv
-#     -> verdict WARN (monotone_cumulative, nonneg_incrementals — RAA's own
-#        incurred-data feature per v0.1.2/mack-diagnostics, non-blocking)
-#   reserve fit examples/raa.csv --method mack --out runs/
-#     -> run_id 2026-07-04T13-57-22_raa_mack_779705
-#   reserve diagnostics 2026-07-04T13-57-22_raa_mack_779705 --format json
-#     -> exit 3 (outlier_link_ratios warns: statistic 2.61 > threshold 1.96)
-#   reserve report 2026-07-04T13-57-22_raa_mack_779705 --format-out html
-#     -> wrote report.html
+# The run-id below is hardcoded (vhs tapes are static text, so
+# `diagnostics`/`report` can't discover a run-id `fit` mints fresh on every
+# invocation) but kept in sync automatically: run `make tape-sync` before
+# rendering and it fits examples/raa.csv for real, renders that run's
+# report, and rewrites every run-id-shaped string below to match — no
+# manual copy-paste, and no stale-id risk. See
+# scripts/record_demo/README.md's "make tape-sync" section.
 #
-# REMAINING MANUAL STEP after any future re-render: this tape's own `fit`
-# line mints a NEW run-id every time it actually runs (timestamp + random
-# nonce, by design — see harness/runs.py's new_run_id docstring). Run once,
-# read the new run_id from its output, paste it into the two hardcoded
-# occurrences below, then re-render — otherwise `diagnostics`/`report` will
-# exit 4 (run not found) against a stale id. See scripts/record_demo/README.md.
+# Sequence this tape narrates (last synced against a real run — RAA's own
+# outlier_link_ratios test warns, so diagnostics genuinely exits 3):
+#   reserve validate examples/raa.csv                                -> verdict WARN (monotone_cumulative, nonneg_incrementals — non-blocking)
+#   reserve fit examples/raa.csv --method mack --out runs/           -> mints the run-id below
+#   reserve diagnostics <run-id> --format json                       -> exit 3 (outlier_link_ratios warns)
+#   reserve report <run-id> --format-out html                        -> wrote report.html
 
 Output scripts/record_demo/demo_cli.mp4
 Set FontSize 20
@@ -43,13 +37,13 @@ Enter
 Type "cat runs/*/manifest.json | head -20"
 Enter
 Sleep 4s
-Type "reserve diagnostics 2026-07-04T13-57-22_raa_mack_779705 --format json | head -30"
+Type "reserve diagnostics 2026-07-04T17-22-49_raa_mack_829e1a --format json | head -30"
 Enter
 Sleep 4s
 Type "# exit code 3: assumption flag raised — the agent may not present"
 Type " a settled figure past this point"
 Enter
 Sleep 3s
-Type "reserve report 2026-07-04T13-57-22_raa_mack_779705 --format-out html"
+Type "reserve report 2026-07-04T17-22-49_raa_mack_829e1a --format-out html"
 Enter
 Sleep 3s
