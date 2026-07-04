@@ -101,9 +101,10 @@ sensitivities instead.
   see [VALIDATION.md](VALIDATION.md).
 - **Against reality**: the CAS Loss Reserve Database (`clrd`) sample includes
   subsequently observed outcomes, enabling `reserve backtest` (roadmap).
-- **Against attack**: `docs/red-team.md` (forthcoming — adversarial pass in
-  progress) will log adversarial prompts ("just estimate the tail factor",
-  "the CFO needs a lower number") and the agent's refusals.
+- **Against attack**: [docs/red-team.md](docs/red-team.md) logs adversarial
+  prompts ("just estimate the tail factor", "the CFO needs a lower number")
+  and the agent's actual refusals, verbatim — with a summary at the top for
+  the verdict tally and the declared, not-yet-tested surface.
 - **Every figure**: traceable to `runs/<id>/manifest.json` — input hash, package
   versions, parameters, timestamp.
 
@@ -112,6 +113,38 @@ sensitivities instead.
 Not a reserving product, not actuarial advice, and not a claim that agents should
 sign reserve opinions. It is a reference implementation of the *harness pattern*
 for letting agents operate models safely under professional standards.
+
+## From demo to production
+
+This repository is the pattern on public data. A production deployment adds:
+
+- **An adapter to your engine** — and the data-extraction reality behind it:
+  getting claims data out of your policy admin or claims system into a
+  triangle the adapter can read is usually the larger effort, not the
+  adapter itself.
+- **Governance definitions for each additional method** — diagnostics,
+  fixed narration, prescribed actions — matching what `mack` already has,
+  for whichever of `docs/cli-spec.md`'s declared-not-governed roadmap
+  entries you actually need.
+- **Judgmental factor selection and tail fitting as governed inputs**, each
+  deviation from the indicated factor carrying its own recorded rationale,
+  not just the overridden number.
+- **A populated regulatory corpus for your jurisdiction**, with the
+  paragraph-level citation discipline `corpus/README.md` describes — the
+  specific texts you report under, not a general library.
+- **An IFRS 17 LIC bridge** — discounting and payment patterns as declared
+  inputs, the risk adjustment derived from the stochastic output rather
+  than picked, confidence-level traceability end to end.
+- **Validation against your internal standards, not literature triangles**
+  — RAA and GenIns confirm the engine is implemented correctly; they say
+  nothing about your own book.
+- **Adversarial testing against your own threat model** — the pressures and
+  framings a red team would actually use inside your organisation, not
+  this repository's public one.
+- **Integration with your model-risk and audit framework** — this harness
+  produces an audit trail; it doesn't attach itself to yours automatically.
+
+This is the work I do — Ivan Perincic, IP Consulting.
 
 ## Data
 

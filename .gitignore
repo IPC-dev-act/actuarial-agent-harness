@@ -35,6 +35,7 @@ htmlcov/
 
 # Local Claude Code state (keep .claude/skills and .claude/commands versioned)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Secrets — belt and braces; nothing in this repo should ever need one
 .env
