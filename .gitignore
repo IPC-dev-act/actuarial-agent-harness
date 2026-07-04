@@ -9,6 +9,10 @@ scripts/record_demo/*.mp4
 scripts/record_demo/*.gif
 scripts/record_demo/*.webm
 
+# Launch carousel output (scripts/carousel/) — pipeline is versioned, its
+# render is not.
+scripts/carousel/carousel.pdf
+
 # Python
 __pycache__/
 *.py[cod]

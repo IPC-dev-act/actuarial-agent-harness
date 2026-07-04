@@ -10,7 +10,7 @@
 # All recipes assume they're invoked from the repo root (Make's default —
 # recipes run in the directory containing this Makefile).
 
-.PHONY: demo demo-tape demo-agent-session demo-report demo-assemble tape-sync
+.PHONY: demo demo-tape demo-agent-session demo-report demo-assemble tape-sync carousel
 
 demo: demo-tape demo-agent-session demo-report demo-assemble
 
@@ -39,3 +39,9 @@ tape-sync:
 	reserve report "$$RUN_ID" --format-out html --out runs/ && \
 	python3 scripts/record_demo/sync_tape_run_id.py "$$RUN_ID" && \
 	echo "Synced scripts/record_demo/demo.tape to run-id: $$RUN_ID"
+
+# Launch carousel (scripts/carousel/): renders presentation.html to
+# carousel.pdf via Playwright chromium headless print mode. See
+# scripts/carousel/README.md for prerequisites.
+carousel:
+	scripts/carousel/build.sh
