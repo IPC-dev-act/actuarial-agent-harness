@@ -167,5 +167,6 @@ Built on [chainladder-python](https://github.com/casact/chainladder-python)
 Group. This repository: MIT.
 
 Built by **Ivan Perincic** — IP Consulting. Questions and ideas:
-[LinkedIn](https://www.linkedin.com/in/ivan-perincic-ab271366/), [FILL], or
+[LinkedIn](https://www.linkedin.com/in/ivan-perincic-ab271366/),
+ivan.perincic@ip-consulting-group.com, or
 open an issue — PRs welcome.
