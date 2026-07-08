@@ -54,7 +54,7 @@ department would follow.
 ### Layer 0 — No AI: run the model yourself
 
 ```bash
-git clone https://github.com/<you>/actuarial-agent-harness
+git clone https://github.com/IPC-dev-act/actuarial-agent-harness
 cd actuarial-agent-harness
 pip install -e .
 reserve validate examples/raa.csv
