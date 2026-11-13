@@ -44,9 +44,9 @@ def test_parse_tail_invalid_raises():
 # --- adapter: capabilities / load_triangle -------------------------------
 
 
-def test_capabilities_declares_mack_only_and_roadmap():
+def test_capabilities_declares_mack_and_chain_ladder_and_roadmap():
     caps = ChainladderAdapter().capabilities()
-    assert caps["methods"] == ["mack"]
+    assert caps["methods"] == ["mack", "chain_ladder"]
     assert set(caps["roadmap_methods"]) == {"bf", "capecod", "bootstrap"}
     assert caps["package"] == "chainladder"
     assert caps["adapter"] == "chainladder_adapter"
@@ -58,8 +58,11 @@ def test_capabilities_roadmap_map_declares_ungoverned_destinations():
     roadmap = caps["roadmap"]
     assert set(roadmap) == {"bf", "capecod", "bootstrap", "selections", "ifrs17_bridge"}
     for destination, status in roadmap.items():
+        if destination == "selections":
+            continue
         assert status.startswith("declared, not governed"), destination
-    assert "judgment inputs require governance schema" in roadmap["selections"]
+    assert roadmap["selections"].startswith("partially governed")
+    assert "manual overrides remain future work" in roadmap["selections"]
 
 
 def test_load_triangle_valuation_year_convention():
@@ -99,6 +102,59 @@ def test_fit_mack_base_case_totals():
         "ldf": pytest.approx(2.9993586513353794),
         "sigma": pytest.approx(166.98347042160677),
     }
+
+
+def test_fit_chain_ladder_base_case_totals_without_mack_se():
+    adapter = ChainladderAdapter()
+    handle = adapter.load_triangle(RAA_CSV)
+    result = adapter.fit(handle, "chain_ladder", {"averaging": "volume"})
+    assert result.method == "chain_ladder"
+    assert result.totals["latest"] == pytest.approx(160987.0)
+    assert result.totals["ultimate"] == pytest.approx(213122.228261, abs=1e-3)
+    assert result.totals["ibnr"] == pytest.approx(52135.228261, abs=1e-3)
+    assert result.totals["mack_se"] is None
+    assert all(row["mack_se"] is None for row in result.by_origin)
+    assert result.development_factors[0]["ldf"] == pytest.approx(2.9993586513353794)
+    assert result.development_factors[0]["ldf"] != 3
+
+
+def test_fit_chain_ladder_factor_artifact_includes_candidates_and_cdfs():
+    adapter = ChainladderAdapter()
+    handle = adapter.load_triangle(RAA_CSV)
+    result = adapter.fit(handle, "chain_ladder", {"averaging": "volume"})
+
+    first = result.development_factors[0]
+    assert first["link_ratios"]
+    assert first["candidate_averages"]["volume_weighted"] == pytest.approx(first["ldf"])
+    assert first["candidate_averages"]["simple_average"] is not None
+    assert first["candidate_averages"]["last_3"] is not None
+    assert first["candidate_averages"]["last_5"] is not None
+    assert first["candidate_averages"]["all_years"] is None
+    assert "same as simple_average" in first["candidate_average_notes"]["all_years"]
+    assert first["cumulative_development_factor"] == pytest.approx(
+        math.prod(row["ldf"] for row in result.development_factors)
+    )
+
+
+def test_fit_chain_ladder_selected_factor_changes_deterministic_projection():
+    adapter = ChainladderAdapter()
+    handle = adapter.load_triangle(RAA_CSV)
+    base = adapter.fit(handle, "chain_ladder", {"averaging": "volume"})
+    selected = adapter.fit(
+        handle,
+        "chain_ladder",
+        {
+            "averaging": "volume",
+            "selected_factors": [{"from_dev": 1, "to_dev": 2, "basis": "last_3", "factor": 2.5}],
+        },
+    )
+
+    assert selected.development_factors[0]["ldf"] == pytest.approx(2.5)
+    assert selected.development_factors[0]["fitted_factor"] == pytest.approx(
+        base.development_factors[0]["ldf"]
+    )
+    assert selected.development_factors[0]["factor_basis"] == "last_3"
+    assert selected.totals["ibnr"] != pytest.approx(base.totals["ibnr"])
 
 
 def test_fit_mack_mature_origin_has_zero_ibnr_not_nan():
@@ -216,6 +272,24 @@ def test_cli_fit_raa_exit_0_matches_totals(tmp_path):
     }
 
 
+def test_cli_fit_chain_ladder_exit_0_null_mack_se(tmp_path):
+    result = _run_cli(
+        "fit", str(RAA_CSV), "--method", "chain_ladder", "--format", "json", "--out", str(tmp_path)
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["method"] == "chain_ladder"
+    assert payload["totals"]["ibnr"] == pytest.approx(52135.228261, abs=1e-3)
+    assert payload["totals"]["mack_se"] is None
+    assert all(row["mack_se"] is None for row in payload["by_origin"])
+
+    run_dir = next(tmp_path.iterdir())
+    manifest_payload = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest_payload["command"].startswith("reserve fit")
+    assert "--method chain_ladder" in manifest_payload["command"]
+    assert manifest_payload["parameters"]["sigma_interpolation"] == "mack"
+
+
 def test_cli_fit_bad_triangle_exit_2_persists_validation_json(tmp_path):
     bad_csv = tmp_path / "bad.csv"
     bad_csv.write_text("origin,value\n1981,100\n")
@@ -258,7 +332,7 @@ def test_cli_fit_selections_rejected_exit_4_quotes_roadmap_status_no_run_persist
     )
     assert result.returncode == 4
     assert "not implemented" in result.stderr
-    assert "judgment inputs require governance schema" in result.stderr
+    assert "manual overrides remain future work" in result.stderr
     assert list(tmp_path.iterdir()) == []
 
 

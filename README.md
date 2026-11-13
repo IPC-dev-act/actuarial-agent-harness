@@ -3,8 +3,9 @@
 **A production harness for AI agents operating actuarial models.**
 
 The model here is a commodity — the open-source, CAS-supported
-[chainladder-python](https://github.com/casact/chainladder-python) package running a
-Mack chain ladder. In your company it would be your internal reserving stack.
+[chainladder-python](https://github.com/casact/chainladder-python) package running
+basic chain ladder and Mack chain ladder. In your company it would be your
+internal reserving stack.
 The harness is the asset: the agent constitution, the validation gates, the audit
 manifests, the diagnostics discipline. **Swap the engine, keep the governance.**
 
@@ -59,11 +60,41 @@ cd actuarial-agent-harness
 pip install -e .
 reserve validate examples/raa.csv
 reserve fit examples/raa.csv --method mack --out runs/
-reserve report <run-id> --format-out html
+reserve fit examples/raa.csv --method chain_ladder --out runs/
+reserve report <run-id> --format-out html  # draft unless workbench approvals exist
 ```
 
 Pure Python. Inspect the deterministic engine first; confirm the numbers come from
 code, not from a model.
+
+Use `--method chain_ladder` for the deterministic/basic chain-ladder view
+with development factors and no Mack standard errors. Use `--method mack`
+when you also need Mack standard errors.
+
+For a governed final report pack, complete the workbench decisions and run
+`reserve report <run-id> --format-out html --require-approval`.
+
+For the deterministic chain-ladder factor review demo, prepare point-level
+leave-one-out influence and review evidence before opening the workbench:
+
+```bash
+reserve factor-analysis <run-id> --format json --out runs
+```
+
+This command produces review evidence, not factor selections. The actuary
+still stages a change, requests a deterministic preview, records rationale,
+and commits the governed decision.
+
+Open the local human-validation workbench with:
+
+```bash
+reserve dashboard --out runs --host 127.0.0.1 --port 8000
+```
+
+Then visit `http://127.0.0.1:8000/workbench-v2/`. The browser never calculates
+reserves: it stages judgment, requests deterministic backend previews, and
+writes governed decisions through validation. `reserve handoff <run-id>`
+creates the structured AI-to-actuary pause/resume artifact.
 
 ### Layer 1 — Agent-assisted: Claude Code, zero configuration
 
@@ -77,7 +108,7 @@ travels with the repo — no installation of governance. Guided slash commands:
 
 | Command | What it does |
 |---|---|
-| `/review <triangle.csv>` | Full pipeline: validate → fit → diagnostics → sensitivity if flagged → report |
+| `/review <triangle.csv\|run-id> [mack\|chain_ladder]` | Run or resume the pipeline, then pause for dashboard judgment before final reporting |
 | `/diagnose <run-id>` | Explain the Mack assumption tests on an existing run |
 | `/challenge <run-id>` | Peer-review mode: the agent looks for weaknesses in the analysis |
 | `/report <run-id>` | Regenerate the HTML review pack |
@@ -156,7 +187,7 @@ pathologies. No client data of any kind.
 
 ## Requirements
 
-- Layer 0: Python ≥ 3.10
+- Layer 0: Python ≥ 3.11 (pinned `numpy==2.4.6` requires it)
 - Layers 1–2: [Claude Code](https://docs.claude.com/en/docs/claude-code/overview)
   — tested with version `2.1.198`
 
@@ -166,7 +197,4 @@ Built on [chainladder-python](https://github.com/casact/chainladder-python)
 (MPL-2.0) by John Bogaardt, Kenneth Hsu and the CAS Open-Source Projects Working
 Group. This repository: MIT.
 
-Built by **Ivan Perincic** — IP Consulting. Questions and ideas:
-[LinkedIn](https://www.linkedin.com/in/ivan-perincic-ab271366/),
-ivan.perincic@ip-consulting-group.com, or
-open an issue — PRs welcome.
+Built by IP Consulting. Questions and ideas are welcome in GitHub issues.

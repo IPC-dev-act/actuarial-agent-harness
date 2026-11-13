@@ -21,11 +21,19 @@ perturbation). Up to eight scenarios: `drop_oldest_origin`,
 
 ## Reading `sensitivity.json`
 
-`{"run_id", "scenarios": [{"scenario_id", "delta_from_base", "totals":
-{"ultimate","ibnr","mack_se"}}], "range": {"ibnr_min","ibnr_max","base_ibnr"}}`.
+`{"run_id", "base_parameters", "scenarios": [{"scenario_id", "delta_from_base",
+"totals": {"ultimate","ibnr","mack_se"}}], "range": {"ibnr_min","ibnr_max","base_ibnr"}}`.
 `range` is computed by the engine over the *finite* scenario totals only — cite
 it directly (CLAUDE.md rule 2: never recompute a min/max/average yourself from
 the scenario rows).
+
+`base_parameters` (v0.1.14) is the actual baseline every scenario in this file
+perturbs from — the base fit's own parameters, layered with any
+`--exclude-origins`/`--exclude-valuations` given to *this* `sensitivity` call.
+When those flags were used, `delta_from_base` is only legible against this
+field, not against the base fit's `fit.json` alone — cite `base_parameters`
+directly rather than assuming the base fit's recorded parameters still
+describe the baseline.
 
 ## Worked example: `drop_oldest_origin` on RAA (degenerate case)
 

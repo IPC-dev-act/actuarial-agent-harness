@@ -8,6 +8,7 @@ from harness import sensitivity
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RAA_CSV = REPO_ROOT / "examples" / "raa.csv"
+CALENDAR_EFFECT_CSV = REPO_ROOT / "examples" / "triangle_calendar_effect.csv"
 
 
 # --- compute_range: min()/max() are unsafe over a list that may contain
@@ -135,6 +136,7 @@ def test_cli_sensitivity_raa_base_case(tmp_path):
     assert result.returncode == 0, result.stderr  # sensitivity is always exit 0
     payload = json.loads(result.stdout)  # strict json.loads — no NaN tokens allowed
     assert payload["run_id"] == run_id
+    assert payload["base_parameters"] == json.loads(fit_result.stdout)["parameters"]
     assert len(payload["scenarios"]) == 8
     for row in payload["scenarios"]:
         assert set(row["totals"]) == {"ultimate", "ibnr", "mack_se"}
@@ -150,6 +152,21 @@ def test_cli_sensitivity_raa_base_case(tmp_path):
         "sensitivity.json",
     ]
     assert manifest_payload["exit_code"] == 0
+
+
+def test_cli_sensitivity_chain_ladder_base_case_has_null_mack_se(tmp_path):
+    fit_result = _run_cli(
+        "fit", str(RAA_CSV), "--method", "chain_ladder", "--format", "json", "--out", str(tmp_path)
+    )
+    assert fit_result.returncode == 0, fit_result.stderr
+    run_id = json.loads(fit_result.stdout)["run_id"]
+
+    result = _run_cli("sensitivity", run_id, "--format", "json", "--out", str(tmp_path))
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["range"]["base_ibnr"] == json.loads(fit_result.stdout)["totals"]["ibnr"]
+    assert all(row["totals"]["mack_se"] is None for row in payload["scenarios"])
 
 
 def test_cli_sensitivity_non_finite_scenario_serializes_as_null_not_exit_3(tmp_path):
@@ -225,3 +242,39 @@ def test_cli_sensitivity_exclude_origins_layers_onto_every_scenario(tmp_path):
     )
     assert constrained_averaging["totals"]["ibnr"] != unconstrained_averaging["totals"]["ibnr"]
     assert constrained_averaging["delta_from_base"] == unconstrained_averaging["delta_from_base"]
+    # base_parameters (v0.1.14) is the only place this CLI-supplied baseline
+    # exclusion is reconstructable from sensitivity.json alone.
+    assert constrained_payload["base_parameters"]["excluded_origins"] == ["1985"]
+    assert json.loads(unconstrained.stdout)["base_parameters"]["excluded_origins"] == []
+
+
+def test_cli_sensitivity_does_not_clobber_a_diagnostics_warning_in_manifest(tmp_path):
+    # Found by independent review (v0.1.14): sensitivity's own manifest
+    # update used to unconditionally overwrite exit_code with its own
+    # (always 0), silently erasing a genuine diagnostics warning — a warned
+    # run would then read as clean from `reserve runs list`.
+    fit_result = _run_cli(
+        "fit",
+        str(CALENDAR_EFFECT_CSV),
+        "--method",
+        "mack",
+        "--format",
+        "json",
+        "--out",
+        str(tmp_path),
+    )
+    run_id = json.loads(fit_result.stdout)["run_id"]
+
+    diag_result = _run_cli("diagnostics", run_id, "--format", "json", "--out", str(tmp_path))
+    assert diag_result.returncode == 3, diag_result.stderr
+
+    run_dir = tmp_path / run_id
+    manifest_after_diag = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest_after_diag["exit_code"] == 3
+
+    sens_result = _run_cli("sensitivity", run_id, "--format", "json", "--out", str(tmp_path))
+    assert sens_result.returncode == 0, sens_result.stderr  # sensitivity's own exit is still 0
+
+    manifest_after_sens = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest_after_sens["exit_code"] == 3  # the warning survives
+    assert manifest_after_sens["outputs"][-1] == "sensitivity.json"

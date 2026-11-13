@@ -6,15 +6,20 @@ title="" attribute naming its source field; render() never computes a
 figure, only formats one that already exists (CLAUDE.md rule 1 extends to
 this renderer as much as to agent narration).
 
-Section structure (0-8) per .claude/skills/reserving-report/SKILL.md.
+Section structure (0-9) per .claude/skills/reserving-report/SKILL.md.
 """
 
 from __future__ import annotations
 
 import html
 import json
+import math
 from pathlib import Path
 from typing import Any
+
+from harness.workbench import io as workbench_io
+from harness.workbench import review_snapshots as workbench_review_snapshots
+from harness.workbench import tasks as workbench_tasks
 
 TEMPLATE_PATH = Path(__file__).parent / "templates" / "report.html"
 REQUIRED_FILES = ["manifest.json", "fit.json"]
@@ -90,6 +95,7 @@ def render(run_id: str, run_dir: Path) -> str:
     triangle = _maybe_read_json(run_dir / "triangle.json")
     diagnostics = _maybe_read_json(run_dir / "diagnostics.json")
     sensitivity = _maybe_read_json(run_dir / "sensitivity.json")
+    selection_set = _selection_set_for_report(run_dir)
 
     sections = [
         _section_scope(run_id, manifest, fit),
@@ -99,8 +105,9 @@ def render(run_id: str, run_dir: Path) -> str:
         _section_results(fit, triangle, validation),
         _section_diagnostics(diagnostics),
         _section_sensitivity(sensitivity),
+        _section_selection_set(selection_set),
         _section_limitations(),
-        _section_governance(manifest),
+        _section_governance(run_id, run_dir, manifest),
     ]
     body = "\n".join(sections)
 
@@ -115,6 +122,67 @@ def _read_json(path: Path) -> dict:
 
 def _maybe_read_json(path: Path) -> dict | None:
     return _read_json(path) if path.is_file() else None
+
+
+def _selection_set_for_report(run_dir: Path) -> dict | None:
+    selection_sets_root = run_dir / "selection_sets"
+    if not selection_sets_root.is_dir():
+        return None
+    decisions_root = run_dir / "decisions"
+    decisions = []
+    if decisions_root.is_dir():
+        decisions = [_read_json(path) for path in sorted(decisions_root.glob("*.json"))]
+    superseded = {d["supersedes_decision_id"] for d in decisions if d.get("supersedes_decision_id")}
+    active_approvals = [
+        d
+        for d in decisions
+        if d.get("decision_id") not in superseded
+        and d.get("decision_type") == "selection_set_approval"
+        and d.get("status") in {"accepted", "modified"}
+    ]
+    active_report_approvals = [
+        d
+        for d in decisions
+        if d.get("decision_id") not in superseded
+        and d.get("decision_type") == "report_approval"
+        and d.get("status") in {"accepted", "modified"}
+    ]
+
+    decision = None
+    selection_set_id = None
+    if len(active_report_approvals) == 1:
+        snapshot_id = active_report_approvals[0].get("review_snapshot_id")
+        if snapshot_id:
+            try:
+                snapshot = workbench_review_snapshots.load_review_snapshot(run_dir, str(snapshot_id))
+            except workbench_review_snapshots.ReviewSnapshotError:
+                snapshot = None
+            if snapshot:
+                basis = snapshot.get("reporting_basis") or {}
+                selection_set_id = basis.get("selection_set_id")
+                selection_approval_id = basis.get("selection_approval_decision_id")
+                decision = next(
+                    (item for item in decisions if item.get("decision_id") == selection_approval_id),
+                    None,
+                )
+    elif not active_report_approvals and len(active_approvals) == 1:
+        decision = active_approvals[0]
+        selection_set_id = decision.get("selection_set_id")
+
+    if selection_set_id:
+        selection_set = _maybe_read_json(selection_sets_root / f"{selection_set_id}.json")
+        if selection_set and selection_set.get("status") == "committed":
+            enriched = dict(selection_set)
+            enriched["approval_decision"] = decision or {}
+            enriched["base_fit"] = _maybe_read_json(run_dir / "fit.json") or {}
+            if "factor_analysis.json" in (selection_set.get("input_hashes") or {}):
+                enriched["factor_analysis"] = _maybe_read_json(run_dir / "factor_analysis.json") or {}
+            if "factor_review_suggestions.json" in (selection_set.get("input_hashes") or {}):
+                enriched["factor_review_suggestions"] = (
+                    _maybe_read_json(run_dir / "factor_review_suggestions.json") or {}
+                )
+            return enriched
+    return None
 
 
 def _esc(value: Any) -> str:
@@ -324,7 +392,7 @@ def _section_results(fit: dict, triangle: dict | None, validation: dict | None) 
             '<p class="note"><strong>undefined</strong> means the underlying figure '
             "could not be estimated from the data available under this fit's "
             "parameters — it is not zero, and is never reported as zero. "
-            "See §7, Limitations &amp; reliances.</p>"
+            "See §8, Limitations &amp; reliances.</p>"
         )
 
     bars_html = _ibnr_bars_html(fit["by_origin"])
@@ -547,7 +615,7 @@ def _section_sensitivity(sensitivity: dict | None) -> str:
             "that removes the only data for some development transition can leave that "
             "transition's factor (and anything built from it) genuinely inestimable. "
             "That is a data-thinness finding about that specific perturbation, not a "
-            "model failure. See §7.</p>"
+            "model failure. See §8.</p>"
         )
 
     return f"""
@@ -584,10 +652,253 @@ def _range_strip_html(r: dict) -> str:
 </div>"""
 
 
+def _section_selection_set(selection_set: dict | None) -> str:
+    if selection_set is None:
+        return """
+<section id="selection-set">
+<h2>7. Selection set</h2>
+<p>No committed selection set is present for this report. Base fit assumptions remain the displayed basis unless a separate approval decision is committed.</p>
+</section>
+"""
+
+    decision = selection_set.get("approval_decision") or {}
+    comparison = selection_set.get("comparison") or {}
+    base = comparison.get("base") or {}
+    candidate = comparison.get("candidate") or {}
+    deltas = comparison.get("deltas") or {}
+    factor_rows = []
+    artifact_name = selection_set.get("selection_set_artifact") or f"selection_sets/{selection_set['selection_set_id']}.json"
+    source_explore = selection_set.get("source_explore_scenario_id")
+    for i, factor in enumerate(selection_set.get("factor_selections", [])):
+        previous_source = f"{artifact_name}: factor_selections[{i}].previous_factor"
+        selected_source = f"{artifact_name}: factor_selections[{i}].selected_factor"
+        basis = factor.get("selected_basis")
+        if factor.get("manual_override"):
+            basis = f"{basis} (manual override)"
+        factor_rows.append(
+            f"<tr><td>{_esc(factor.get('development_age'))}</td>"
+            f"<td>{_fig(factor.get('previous_factor'), previous_source, decimals=4)}</td>"
+            f"<td>{_fig(factor.get('selected_factor'), selected_source, decimals=4)}</td>"
+            f"<td>{_esc(basis)}</td>"
+            f"<td>{_esc(factor.get('rationale') or 'n/a')}</td></tr>"
+        )
+    exclusion_rows = []
+    for i, exclusion in enumerate(selection_set.get("exclusions", [])):
+        exclusion_source = f"{artifact_name}: exclusions[{i}].value"
+        detail_parts = []
+        if exclusion.get("origin"):
+            detail_parts.append(f"origin {exclusion.get('origin')}")
+        if exclusion.get("development_age"):
+            detail_parts.append(f"development age {exclusion.get('development_age')}")
+        if exclusion.get("from_dev"):
+            detail_parts.append(f"from_dev {exclusion.get('from_dev')}")
+        detail = "; ".join(detail_parts) if detail_parts else "n/a"
+        exclusion_rows.append(
+            f"<tr><td>{_esc(exclusion.get('type'))}</td>"
+            f"<td>{_fig(exclusion.get('value'), exclusion_source)}</td>"
+            f"<td>{_esc(detail)}</td>"
+            f"<td>{_esc(exclusion.get('rationale'))}</td></tr>"
+        )
+    if not exclusion_rows:
+        exclusion_rows.append('<tr><td colspan="4"><em>none</em></td></tr>')
+
+    tail_selection = selection_set.get("tail_selection") or {}
+    tail_text = tail_selection.get("selected_parameter") or selection_set.get("parameters", {}).get("tail") or "base fit"
+    tail_rationale = tail_selection.get("rationale") or "No governed tail change was selected."
+
+    hashes = selection_set.get("input_hashes") or {}
+    hash_rows = "".join(
+        f"<tr><td>{_esc(name)}</td><td>{_esc(value)}</td></tr>"
+        for name, value in hashes.items()
+    )
+    factor_curve = _selection_factor_curve_svg(selection_set)
+    link_ratio_exhibits = _selection_link_ratio_exhibits(selection_set)
+    suggestion_rows = _selection_suggestion_rows(selection_set)
+    return f"""
+<section id="selection-set">
+<h2>7. Selection set</h2>
+<p class="source">Source: {selection_set.get('selection_set_artifact', 'selection_sets/*.json')}{', decisions/*.json' if decision else ''}</p>
+<p>Selection set {_fig(selection_set.get('selection_set_id'), 'selection_set.selection_set_id')} is
+{_fig(selection_set.get('status'), 'selection_set.status')} with scenario id
+{_fig(selection_set.get('preview_scenario_id'), 'selection_set.preview_scenario_id')}.</p>
+<p>Approval decision: {_fig(decision.get('decision_id', 'none'), 'decisions: selection_set_approval decision_id')}.</p>
+<p>Source exploratory scenario: {_fig(source_explore or 'none', 'selection_set.source_explore_scenario_id')}.</p>
+<p>Actuarial rationale: {_esc(selection_set.get('global_rationale') or 'n/a')}</p>
+<h3>Base vs selected scenario</h3>
+<table>
+<thead><tr><th>Metric</th><th>Base</th><th>Selected</th><th>Delta</th></tr></thead>
+<tbody>
+<tr><td>Latest</td><td>{_fig(base.get('latest'), 'selection_set.comparison.base.latest', money=True)}</td><td>{_fig(candidate.get('latest'), 'selection_set.comparison.candidate.latest', money=True)}</td><td>n/a</td></tr>
+<tr><td>Ultimate</td><td>{_fig(base.get('ultimate'), 'selection_set.comparison.base.ultimate', money=True)}</td><td>{_fig(candidate.get('ultimate'), 'selection_set.comparison.candidate.ultimate', money=True)}</td><td>{_fig(deltas.get('ultimate'), 'selection_set.comparison.deltas.ultimate', money=True)}</td></tr>
+<tr><td>IBNR</td><td>{_fig(base.get('ibnr'), 'selection_set.comparison.base.ibnr', money=True)}</td><td>{_fig(candidate.get('ibnr'), 'selection_set.comparison.candidate.ibnr', money=True)}</td><td>{_fig(deltas.get('ibnr'), 'selection_set.comparison.deltas.ibnr', money=True)}</td></tr>
+</tbody>
+</table>
+<h3>Selected factors</h3>
+{factor_curve}
+<table>
+<thead><tr><th>Development age</th><th>Base factor</th><th>Selected factor</th><th>Basis</th><th>Rationale</th></tr></thead>
+<tbody>{''.join(factor_rows) if factor_rows else '<tr><td colspan="5"><em>none</em></td></tr>'}</tbody>
+</table>
+{link_ratio_exhibits}
+<h3>AI review evidence disposition</h3>
+<p class="source">Source: factor_review_suggestions.json and {artifact_name}</p>
+<table>
+<thead><tr><th>Suggestion</th><th>Evidence</th><th>Disposition</th><th>Rationale</th></tr></thead>
+<tbody>{suggestion_rows}</tbody>
+</table>
+<h3>Exclusions used</h3>
+<table>
+<thead><tr><th>Type</th><th>Value</th><th>Detail</th><th>Rationale</th></tr></thead>
+<tbody>{''.join(exclusion_rows)}</tbody>
+</table>
+<h3>Tail selection</h3>
+<p>Selected tail: {_fig(tail_text, 'selection_set.tail_selection.selected_parameter')}.</p>
+<p>Tail rationale: {_esc(tail_rationale)}</p>
+<h3>Reproducibility appendix</h3>
+<p>Command trail: {_fig(selection_set.get('command'), 'selection_set.command')}</p>
+<table>
+<thead><tr><th>Artifact</th><th>Input hash</th></tr></thead>
+<tbody>{hash_rows}</tbody>
+</table>
+<p class="note">This section records selected assumptions only. It does not suppress warnings, diagnostics, or report-approval requirements elsewhere in the workbench.</p>
+</section>
+"""
+
+
+def _selection_factor_curve_svg(selection_set: dict) -> str:
+    base_rows = [row for row in (selection_set.get("base_fit") or {}).get("development_factors", []) if row.get("to_dev") != "ult"]
+    selected_rows = [row for row in (selection_set.get("candidate_fit") or {}).get("development_factors", []) if row.get("to_dev") != "ult"]
+    if not base_rows or not selected_rows:
+        return '<p class="note">Factor curve exhibit is unavailable.</p>'
+    selected_by_dev = {str(row.get("from_dev")): row for row in selected_rows}
+    pairs = []
+    for row in base_rows:
+        selected = selected_by_dev.get(str(row.get("from_dev"))) or {}
+        base_value = row.get("selected_factor", row.get("ldf"))
+        selected_value = selected.get("selected_factor", selected.get("ldf"))
+        if isinstance(base_value, (int, float)) and isinstance(selected_value, (int, float)):
+            pairs.append((row, float(base_value), float(selected_value)))
+    if not pairs:
+        return '<p class="note">Factor curve exhibit is unavailable.</p>'
+    logs = [math.log(max(value, 1e-12)) for _, base, selected in pairs for value in (base, selected)]
+    low, high = min(logs), max(logs)
+    span = high - low or 1.0
+    width, height = 760, 245
+    x_for = lambda i: 60 + i * (660 / max(1, len(pairs) - 1))
+    y_for = lambda value: 25 + (high - math.log(max(value, 1e-12))) / span * 155
+    base_points = " ".join(f"{x_for(i):.1f},{y_for(base):.1f}" for i, (_, base, _) in enumerate(pairs))
+    selected_points = " ".join(f"{x_for(i):.1f},{y_for(selected):.1f}" for i, (_, _, selected) in enumerate(pairs))
+    labels = "".join(
+        f'<text x="{x_for(i):.1f}" y="208" text-anchor="middle">{_esc(row.get("development_age") or f"{row.get('from_dev')}→{row.get('to_dev')}")}</text>'
+        for i, (row, _, _) in enumerate(pairs)
+    )
+    return f"""
+<figure class="selection-exhibit">
+<figcaption>Base and governed selected development factor curve (log display scale)</figcaption>
+<svg viewBox="0 0 {width} {height}" role="img" aria-label="Base and selected development factor curves">
+<line x1="60" y1="180" x2="720" y2="180" stroke="#b9b1a4"/>
+<polyline points="{base_points}" fill="none" stroke="#7e776d" stroke-width="2" stroke-dasharray="5 4"/>
+<polyline points="{selected_points}" fill="none" stroke="#0f6e61" stroke-width="3"/>
+{''.join(f'<circle cx="{x_for(i):.1f}" cy="{y_for(selected):.1f}" r="4" fill="#0f6e61"><title>Selected {selected:.6f}</title></circle>' for i, (_, _, selected) in enumerate(pairs))}
+{labels}
+<text x="60" y="232" fill="#7e776d">-- base</text><text x="150" y="232" fill="#0f6e61">— selected</text>
+</svg>
+</figure>
+"""
+
+
+def _selection_link_ratio_exhibits(selection_set: dict) -> str:
+    analysis = selection_set.get("factor_analysis") or {}
+    periods = {str(row.get("from_dev")): row for row in analysis.get("development_periods", [])}
+    changed_devs = {str(row.get("from_dev")) for row in selection_set.get("factor_selections", [])}
+    changed_devs.update(
+        str(row.get("from_dev"))
+        for row in selection_set.get("factor_point_exclusions", [])
+        if row.get("from_dev") is not None
+    )
+    selected_by_dev = {
+        str(row.get("from_dev")): row.get("selected_factor", row.get("ldf"))
+        for row in (selection_set.get("candidate_fit") or {}).get("development_factors", [])
+    }
+    figures = []
+    for from_dev in sorted(
+        changed_devs,
+        key=lambda value: (0, int(value)) if value.isdigit() else (1, value),
+    ):
+        period = periods.get(from_dev)
+        if not period:
+            continue
+        points = [row for row in period.get("points", []) if isinstance(row.get("link_ratio"), (int, float))]
+        if not points:
+            continue
+        selected_value = selected_by_dev.get(from_dev)
+        values = [float(row["link_ratio"]) for row in points]
+        if isinstance(selected_value, (int, float)):
+            values.append(float(selected_value))
+        low, high = min(values), max(values)
+        span = high - low or 1.0
+        x_for = lambda i: 58 + i * (650 / max(1, len(points) - 1))
+        y_for = lambda value: 22 + (high - float(value)) / span * 142
+        excluded_origins = {
+            str(item.get("origin"))
+            for item in selection_set.get("factor_point_exclusions", [])
+            if str(item.get("from_dev")) == from_dev
+        }
+        circles = "".join(
+            f'<circle cx="{x_for(i):.1f}" cy="{y_for(point["link_ratio"]):.1f}" r="5" fill="{"#b64132" if str(point.get("origin")) in excluded_origins else "#0f6e61"}"><title>{_esc(point.get("origin"))}: {float(point["link_ratio"]):.6f}</title></circle>'
+            for i, point in enumerate(points)
+        )
+        labels = "".join(
+            f'<text x="{x_for(i):.1f}" y="188" text-anchor="middle">{_esc(point.get("origin"))}</text>'
+            for i, point in enumerate(points)
+        )
+        selected_line = ""
+        if isinstance(selected_value, (int, float)):
+            selected_line = f'<line x1="58" y1="{y_for(selected_value):.1f}" x2="708" y2="{y_for(selected_value):.1f}" stroke="#ab601a" stroke-width="3"/><text x="704" y="{y_for(selected_value)-6:.1f}" text-anchor="end" fill="#ab601a">selected {float(selected_value):.6f}</text>'
+        figures.append(
+            f'<figure class="selection-exhibit"><figcaption>Link-ratio review: {_esc(period.get("development_age"))}</figcaption>'
+            f'<svg viewBox="0 0 760 215" role="img" aria-label="Link ratio observations and selected factor">'
+            f'<line x1="58" y1="164" x2="708" y2="164" stroke="#b9b1a4"/>{selected_line}{circles}{labels}</svg></figure>'
+        )
+    if not figures:
+        return '<h3>Link-ratio review exhibits</h3><p class="note">No changed development ages were committed.</p>'
+    return '<h3>Link-ratio review exhibits</h3>' + "".join(figures)
+
+
+def _selection_suggestion_rows(selection_set: dict) -> str:
+    suggestion_by_id = {
+        str(item.get("suggestion_id")): item
+        for item in (selection_set.get("factor_review_suggestions") or {}).get("suggestions", [])
+    }
+    dispositions = selection_set.get("suggestion_dispositions") or []
+    if not dispositions:
+        return '<tr><td colspan="4"><em>No review-suggestion dispositions were committed.</em></td></tr>'
+    rows = []
+    for disposition in dispositions:
+        item = suggestion_by_id.get(str(disposition.get("suggestion_id"))) or {}
+        evidence = item.get("evidence") or {}
+        evidence_text = "; ".join(
+            part
+            for part in (
+                f"origin {evidence.get('origin')}" if evidence.get("origin") else None,
+                f"link ratio {evidence.get('link_ratio'):.6f}" if isinstance(evidence.get("link_ratio"), (int, float)) else None,
+                f"delta IBNR {evidence.get('delta_ibnr'):,.1f}" if isinstance(evidence.get("delta_ibnr"), (int, float)) else None,
+                f"{evidence.get('observation_count')} observations" if evidence.get("observation_count") is not None else None,
+            )
+            if part
+        ) or "n/a"
+        rows.append(
+            f'<tr><td>{_esc(item.get("title") or disposition.get("suggestion_id"))}</td>'
+            f'<td>{_esc(evidence_text)}</td><td>{_esc(disposition.get("status"))}</td>'
+            f'<td>{_esc(disposition.get("rationale") or "n/a")}</td></tr>'
+        )
+    return "".join(rows)
+
+
 def _section_limitations() -> str:
     return """
 <section id="limitations">
-<h2>7. Limitations &amp; reliances</h2>
+<h2>8. Limitations &amp; reliances</h2>
 <ul class="plain">
 <li>This review relies on the input triangle as provided. <code>validate</code>'s
 checks are structural only — they do not audit the source system or confirm
@@ -609,10 +920,69 @@ actuary's own judgment.</li>
 """
 
 
-def _section_governance(manifest: dict) -> str:
+def _governance_status(run_id: str, run_dir: Path) -> dict[str, Any]:
+    decisions = workbench_io.active_decisions(workbench_io.load_decisions(run_dir))
+    report_approvals = [
+        decision
+        for decision in decisions
+        if decision.get("decision_type") == "report_approval"
+        and decision.get("status") in {"accepted", "modified"}
+    ]
+    snapshot_id = report_approvals[0].get("review_snapshot_id") if len(report_approvals) == 1 else None
+    snapshot_error = None
+    if snapshot_id:
+        try:
+            snapshot = workbench_review_snapshots.load_review_snapshot(run_dir, str(snapshot_id))
+            if snapshot is None:
+                snapshot_error = "approved review snapshot is missing"
+            else:
+                workbench_review_snapshots.validate_review_snapshot(run_id, run_dir, snapshot)
+        except workbench_review_snapshots.ReviewSnapshotError as exc:
+            snapshot_error = str(exc)
+    elif report_approvals:
+        snapshot_error = "active report approval is not bound to a review snapshot"
+    has_report_approval = len(report_approvals) == 1 and snapshot_error is None
+    task_payload = workbench_tasks.build_validation_tasks(run_id, run_dir)
+    pending = [task for task in task_payload.get("tasks", []) if task.get("status") == "pending"]
+    explore_root = run_dir / "explore" / "scenarios"
+    explore_count = len(list(explore_root.glob("*.json"))) if explore_root.is_dir() else 0
+    if has_report_approval and not pending:
+        return {
+            "status": "approved",
+            "detail": "Active report_approval decision exists and no workbench tasks are pending.",
+            "report_approval_state": "active report_approval decision exists",
+            "review_snapshot_id": snapshot_id,
+            "explore_state": (
+                f"{explore_count} exploratory scenario(s) exist; not governed decisions"
+                if explore_count
+                else "no exploratory scenarios"
+            ),
+            "pending_count": 0,
+        }
+    reasons = []
+    if pending:
+        reasons.append(f"{len(pending)} pending workbench task(s)")
+    if not has_report_approval:
+        reasons.append(snapshot_error or "no active report_approval decision")
+    return {
+        "status": "draft/incomplete",
+        "detail": "; ".join(reasons) if reasons else "governance state is incomplete",
+        "report_approval_state": "active report_approval decision exists" if has_report_approval else (snapshot_error or "no active report_approval decision"),
+        "review_snapshot_id": snapshot_id,
+        "explore_state": (
+            f"{explore_count} exploratory scenario(s) exist; not governed decisions"
+            if explore_count
+            else "no exploratory scenarios"
+        ),
+        "pending_count": len(pending),
+    }
+
+
+def _section_governance(run_id: str, run_dir: Path, manifest: dict) -> str:
     engine = manifest.get("engine") or {}
     env = manifest["environment"]
     input_info = manifest["inputs"][0]
+    governance = _governance_status(run_id, run_dir)
     engine_text = (
         f"{engine.get('package', 'n/a')} {engine.get('version', '')}".strip()
         if engine
@@ -620,7 +990,7 @@ def _section_governance(manifest: dict) -> str:
     )
     return f"""
 <section id="governance" class="footer">
-<h2>8. Governance</h2>
+<h2>9. Governance</h2>
 <dl>
 <dt>Run ID</dt><dd>{_fig(manifest['run_id'], 'manifest.json: run_id')}</dd>
 <dt>Command</dt><dd>{_fig(manifest['command'], 'manifest.json: command')}</dd>
@@ -629,6 +999,11 @@ def _section_governance(manifest: dict) -> str:
 <dt>Engine</dt><dd>{_fig(engine_text, 'manifest.json: engine.package/version')}</dd>
 <dt>Harness version</dt><dd>{_fig(env['harness_version'], 'manifest.json: environment.harness_version')}</dd>
 <dt>Generated (UTC)</dt><dd>{_fig(manifest['created_utc'], 'manifest.json: created_utc')}</dd>
+<dt>Governance status</dt><dd>{_fig(governance['status'], 'validation_tasks.json + decisions/*.json')}</dd>
+<dt>Governance detail</dt><dd>{_fig(governance['detail'], 'validation_tasks.json + decisions/*.json')}</dd>
+<dt>Report approval state</dt><dd>{_fig(governance['report_approval_state'], 'decisions/*.json: report_approval')}</dd>
+<dt>Review snapshot</dt><dd>{_fig(governance.get('review_snapshot_id') or 'none', 'decisions/*.json: review_snapshot_id')}</dd>
+<dt>Explore state</dt><dd>{_fig(governance['explore_state'], 'explore/*.json')}</dd>
 </dl>
 </section>
 """

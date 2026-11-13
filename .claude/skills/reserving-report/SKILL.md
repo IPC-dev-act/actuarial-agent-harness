@@ -5,16 +5,19 @@ description: Review-pack structure and the citation rule for every quantitative 
 
 # Reserving report
 
-`reserve report <run-id> --format-out html` (`harness/render/report_html.py`,
-implemented since v0.1.8) is the deterministic HTML renderer — it produces
-every quantitative section below directly from `runs/<run-id>/`'s own JSON,
-with no LLM in its loop. This skill governs two things: the structure the
-renderer implements (below — matched exactly, section for section), and the
-*commentary* you write alongside it, since the renderer has no narrative
-judgment of its own. Use it both ways: to read a rendered report (know what
-each section is drawing from and why) and to write the prose that goes
-around it, whether that's `/report`'s commentary pass over an existing
-render or a `/review` walkthrough narrating the same pipeline as it runs.
+`reserve report <run-id> --format-out html --require-approval`
+(`harness/render/report_html.py`) is the governed final-report path. The same
+renderer can still be run without `--require-approval` for draft output, but
+the Governance section must mark incomplete approval state as
+`draft/incomplete`. It produces every quantitative section below directly
+from `runs/<run-id>/`'s own JSON, with no LLM in its loop. This skill governs
+two things: the structure the renderer implements (below — matched exactly,
+section for section), and the *commentary* you write alongside it, since the
+renderer has no narrative judgment of its own. Use it both ways: to read a
+rendered report (know what each section is drawing from and why) and to write
+the prose that goes around it, whether that's `/report`'s commentary pass
+over an existing render or a `/review` walkthrough narrating the same
+pipeline as it runs.
 
 ## The one rule everything else follows
 
@@ -53,23 +56,22 @@ cited) or "the reserve looks adequate" (an opinion this harness doesn't offer
 4. **Results** — development factors and by-origin/total reserves and
    standard errors, from `fit.json`. State `units: "as-input"` explicitly;
    never rescale or round beyond what's asked.
-4a. **Selected vs indicated** *(reserved — renders only when a selections
-   input exists in the run; `selections` is currently roadmap, "declared,
-   not governed" — see `docs/cli-spec.md`'s Roadmap section)*. Per
-   development period: the indicated factor, the selected factor, the
-   deviation between them, the recorded rationale for that deviation, and
-   the aggregate impact of all selections on ultimates. A selection without
-   a recorded rationale for every deviation isn't auditable — don't narrate
-   one from a future run as if it were (CLAUDE.md rule 1 applies to a
-   selection file's rationale field exactly as it does to any other cited
-   figure).
 5. **Diagnostics** — every test's verdict, narrated per `mack-diagnostics`'
    fixed language; if `overall` is `warn`, the prescribed actions considered
    and (if run) their results, before any headline figure is presented as
    settled (CLAUDE.md rule 5).
 6. **Sensitivity** — the grid and range, narrated per `sensitivity-analysis`,
    if a flag prescribed it or it was otherwise run.
-7. **Limitations & reliances** — reliance on the input data as provided
+7. **Selection set** — if `selection_sets/<selection_set_id>.json` exists
+   with `status: committed`, the renderer discloses selected factors,
+   exclusions, global rationale, base-vs-selected comparison, scenario id,
+   decision id when an active `selection_set_approval` exists, command trail,
+   and input hashes. A committed selection set is not report approval. A
+   preview selection set is exploratory and must not be narrated as committed
+   judgment. If no committed selection set exists, state that base fit
+   assumptions remain the displayed basis unless a separate approval
+   decision is committed.
+8. **Limitations & reliances** — reliance on the input data as provided
    (`validate`'s checks are structural only; they don't audit the source
    system or confirm the underlying claim records); the five diagnostics
    tests are reference-implementation screening indicators (`mack-
@@ -80,10 +82,26 @@ cited) or "the reserve looks adequate" (an opinion this harness doesn't offer
    `corpus/` document is cited (below); this harness does not provide
    actuarial advice or opine on reserve adequacy — any decision this review
    informs remains a qualified actuary's own judgment.
-8. **Governance footer** — `run_id`, input `sha256`, `engine.package`/
-   `engine.version`, `environment.harness_version`, `created_utc` — the exact
-   fields ARCHITECTURE.md's manifest schema already carries; don't compose a
-   new footer format, read this one back.
+9. **Governance footer** — `run_id`, input `sha256`, `engine.package`/
+   `engine.version`, `environment.harness_version`, `created_utc`,
+   governance status, and governance detail. Static run metadata comes from
+   the exact fields ARCHITECTURE.md's manifest schema already carries;
+   governance state is derived from workbench tasks and decisions.
+
+## Workbench governance before report
+
+Before presenting a report as final or approved, check `reserve status
+<run-id> --format json`, `validation_tasks.json`, and `decisions/*.json`.
+Required dashboard tasks must be complete and an active `report_approval`
+decision must exist. Run final reports with
+`reserve report <run-id> --format-out html --require-approval`. If approval
+is missing, do not run the final command. Only render without
+`--require-approval` when the user explicitly asks for a draft, and label it
+draft/incomplete.
+
+Selection-set report disclosure comes from `selection_sets/*.json` and
+`selection_set_approval` decisions only. Do not infer selected factors from
+conversation or from preview artifacts alone.
 
 ## Regulatory/standards claims
 
@@ -102,3 +120,7 @@ is refused the same as any other unsourced figure.
   better (CLAUDE.md rule 6) — refuse that instruction plainly, citing this
   constitution, regardless of who's asking.
 - Never present a report as final while a diagnostics flag sits unaddressed.
+- Never present a report as approved without an active `report_approval`
+  decision artifact.
+- Never treat `selection_sets/*.json` with `status: preview` as committed
+  actuarial judgment.

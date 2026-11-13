@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Interactive Reserving Workbench</title>
+    <link rel="stylesheet" href="/styles.css?v=retro-cockpit-20260707" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="left-rail">
+        <div class="brand">
+          <div class="brand-mark">RW</div>
+          <div>
+            <h1>Reserving Workbench</h1>
+            <p>Local MVP. No production authentication.</p>
+          </div>
+        </div>
+
+        <label class="field-label" for="runSelect">Run</label>
+        <select id="runSelect"></select>
+        <button id="refreshRun" class="full-button">Refresh</button>
+
+        <section class="rail-section">
+          <h2>Status</h2>
+          <div id="statusBadge" class="status-badge">No run</div>
+          <dl id="runCounts" class="metric-list"></dl>
+        </section>
+
+      </aside>
+
+      <main class="main-panel">
+        <header class="workbench-header">
+          <div class="header-identity">
+            <p class="eyebrow">Professional reserving cockpit</p>
+            <h1 id="runTitle">Select a run</h1>
+            <p id="runSubtitle">Audited artifacts, governed decisions, deterministic calculations.</p>
+          </div>
+          <div class="header-status">
+            <div id="headerBadges" class="header-badges"></div>
+          </div>
+          <div id="commandStrip" class="command-strip"></div>
+        </header>
+
+        <nav class="tabs" aria-label="Workbench sections">
+          <button class="tab active" data-tab="overview">Overview</button>
+          <button class="tab" data-tab="triangle">Triangles</button>
+          <button class="tab" data-tab="factors">Factors</button>
+          <button class="tab" data-tab="scenarios">Scenarios</button>
+          <button class="tab" data-tab="decisions">Decisions</button>
+          <button class="tab" data-tab="report">Report</button>
+          <button class="tab" data-tab="artifacts">Artifacts</button>
+        </nav>
+
+        <section id="overviewTab" class="tab-panel active"></section>
+        <section id="triangleTab" class="tab-panel"></section>
+        <section id="factorsTab" class="tab-panel"></section>
+        <section id="scenariosTab" class="tab-panel"></section>
+        <section id="decisionsTab" class="tab-panel"></section>
+        <section id="reportTab" class="tab-panel"></section>
+        <section id="artifactsTab" class="tab-panel"></section>
+      </main>
+
+      <aside class="right-panel">
+        <section id="reportReadinessPanel"></section>
+        <section id="validationPanel"></section>
+        <section class="decision-log">
+          <h2>Committed Decisions</h2>
+          <div id="decisionList"></div>
+        </section>
+      </aside>
+    </div>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js?v=retro-cockpit-20260707"></script>
+  </body>
+</html>

@@ -63,6 +63,8 @@ Type "# exit code 3: assumption flag raised — the agent may not present"
 Type " a settled figure past this point"
 Enter
 Sleep 3s
+Type "# draft report: governance footer marks incomplete until approvals exist"
+Enter
 Type "reserve report <RUN-ID> --format-out html"
 Enter
 Sleep 3s

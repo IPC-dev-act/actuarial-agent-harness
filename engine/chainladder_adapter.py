@@ -22,7 +22,9 @@ from engine.base import (
 )
 
 ADAPTER_NAME = "chainladder_adapter"
-METHODS = ["mack"]
+METHOD_MACK = "mack"
+METHOD_CHAIN_LADDER = "chain_ladder"
+METHODS = [METHOD_MACK, METHOD_CHAIN_LADDER]
 ROADMAP_METHODS = ["bf", "capecod", "bootstrap"]
 # load_triangle() has always hardcoded cumulative=True regardless of what
 # the input actually is — a silent-fabrication risk if a genuinely
@@ -60,7 +62,7 @@ ROADMAP = {
     "bf": "declared, not governed",
     "capecod": "declared, not governed",
     "bootstrap": "declared, not governed",
-    "selections": "declared, not governed — judgment inputs require governance schema",
+    "selections": "partially governed — BCL candidate-basis and dashboard selection-set manual override preview/decision only; manual overrides remain future work for --selections CLI",
     "ifrs17_bridge": "declared, not governed",
 }
 
@@ -130,36 +132,15 @@ class ChainladderAdapter(EngineAdapter):
     def fit(self, tri: TriangleHandle, method: str, params: dict) -> FitResult:
         if method not in METHODS:
             raise UnsupportedMethodError(method)
-        return self._fit_mack(tri, params)
+        if method == METHOD_MACK:
+            return self._fit_mack(tri, params)
+        return self._fit_chain_ladder(tri, params)
 
     def _fit_mack(self, tri: TriangleHandle, params: dict) -> FitResult:
-        triangle = tri.native
-        averaging = params.get("averaging", "volume")
-        tail = params.get("tail") or {"type": "none"}
-        n_periods = params.get("n_periods")
-        excluded_origins = params.get("excluded_origins") or []
-        excluded_valuations = params.get("excluded_valuations") or []
-        sigma_interpolation = params.get("sigma_interpolation") or DEFAULT_SIGMA_INTERPOLATION
-        if sigma_interpolation not in SIGMA_INTERPOLATION_CHOICES:
-            raise ValueError(
-                f"invalid sigma_interpolation: {sigma_interpolation!r} "
-                f"(expected one of {SIGMA_INTERPOLATION_CHOICES})"
-            )
-
-        drop_pairs = self._exclude_origin_drop_pairs(triangle, excluded_origins)
-
-        dev = cl.Development(
-            average=averaging,
-            n_periods=n_periods if n_periods is not None else -1,
-            drop=drop_pairs or None,
-            drop_valuation=excluded_valuations or None,
-            sigma_interpolation=sigma_interpolation,
-        ).fit(triangle)
-        developed = dev.transform(triangle)
-
-        if tail["type"] == "constant":
-            tail_fitted = cl.TailConstant(tail=tail["factor"]).fit(developed)
-            developed = tail_fitted.transform(developed)
+        prepared = self._prepare_developed_triangle(tri, params)
+        dev = prepared["dev"]
+        tail = prepared["tail"]
+        developed = prepared["developed"]
 
         mack = cl.MackChainladder().fit(developed)
 
@@ -170,18 +151,109 @@ class ChainladderAdapter(EngineAdapter):
         return FitResult(
             method="mack",
             parameters={
-                "averaging": averaging,
+                "averaging": prepared["averaging"],
                 "tail": _tail_to_param_string(tail),
-                "n_periods": n_periods,
-                "excluded_origins": list(excluded_origins),
-                "excluded_valuations": list(excluded_valuations),
-                "sigma_interpolation": sigma_interpolation,
+                "n_periods": prepared["n_periods"],
+                "excluded_origins": list(prepared["excluded_origins"]),
+                "excluded_valuations": list(prepared["excluded_valuations"]),
+                "excluded_factor_points": list(prepared["excluded_factor_points"]),
+                "sigma_interpolation": prepared["sigma_interpolation"],
             },
             development_factors=development_factors,
             by_origin=by_origin,
             totals=totals,
             native={"dev": dev, "mack": mack},
         )
+
+    def _fit_chain_ladder(self, tri: TriangleHandle, params: dict) -> FitResult:
+        prepared = self._prepare_developed_triangle(tri, params)
+        dev = prepared["dev"]
+        tail = prepared["tail"]
+        chain_ladder = cl.Chainladder().fit(prepared["developed"])
+
+        development_factors = self._development_factors(
+            dev,
+            tail,
+            triangle=tri.native,
+            basis=prepared["averaging"],
+            selected_factors=prepared["selected_factors"],
+            fitted_dev=prepared["fitted_dev"],
+            excluded_origins=prepared["excluded_origins"],
+            excluded_valuations=prepared["excluded_valuations"],
+            excluded_factor_points=prepared["excluded_factor_points"],
+        )
+        by_origin = self._chain_ladder_by_origin(chain_ladder)
+        totals = self._chain_ladder_totals(by_origin)
+
+        return FitResult(
+            method=METHOD_CHAIN_LADDER,
+            parameters={
+                "averaging": prepared["averaging"],
+                "tail": _tail_to_param_string(tail),
+                "n_periods": prepared["n_periods"],
+                "excluded_origins": list(prepared["excluded_origins"]),
+                "excluded_valuations": list(prepared["excluded_valuations"]),
+                "excluded_factor_points": list(prepared["excluded_factor_points"]),
+                "sigma_interpolation": prepared["sigma_interpolation"],
+                "selected_factors": list(prepared["selected_factors"]),
+            },
+            development_factors=development_factors,
+            by_origin=by_origin,
+            totals=totals,
+            native={"dev": dev, "chain_ladder": chain_ladder},
+        )
+
+    def _prepare_developed_triangle(self, tri: TriangleHandle, params: dict) -> dict:
+        triangle = tri.native
+        averaging = params.get("averaging", "volume")
+        tail = params.get("tail") or {"type": "none"}
+        n_periods = params.get("n_periods")
+        excluded_origins = params.get("excluded_origins") or []
+        excluded_valuations = params.get("excluded_valuations") or []
+        excluded_factor_points = params.get("excluded_factor_points") or []
+        sigma_interpolation = params.get("sigma_interpolation") or DEFAULT_SIGMA_INTERPOLATION
+        selected_factors = params.get("selected_factors") or []
+        if sigma_interpolation not in SIGMA_INTERPOLATION_CHOICES:
+            raise ValueError(
+                f"invalid sigma_interpolation: {sigma_interpolation!r} "
+                f"(expected one of {SIGMA_INTERPOLATION_CHOICES})"
+            )
+
+        drop_pairs = [
+            *self._exclude_origin_drop_pairs(triangle, excluded_origins),
+            *self._exclude_factor_point_drop_pairs(triangle, excluded_factor_points),
+        ]
+        drop_pairs = list(dict.fromkeys(drop_pairs))
+
+        dev = cl.Development(
+            average=averaging,
+            n_periods=n_periods if n_periods is not None else -1,
+            drop=drop_pairs or None,
+            drop_valuation=excluded_valuations or None,
+            sigma_interpolation=sigma_interpolation,
+        ).fit(triangle)
+        fitted_dev = dev
+        if selected_factors:
+            dev = self._selected_factor_development(triangle, dev, selected_factors)
+        developed = dev.transform(triangle)
+
+        if tail["type"] == "constant":
+            tail_fitted = cl.TailConstant(tail=tail["factor"]).fit(developed)
+            developed = tail_fitted.transform(developed)
+
+        return {
+            "averaging": averaging,
+            "tail": tail,
+            "n_periods": n_periods,
+            "excluded_origins": excluded_origins,
+            "excluded_valuations": excluded_valuations,
+            "excluded_factor_points": excluded_factor_points,
+            "sigma_interpolation": sigma_interpolation,
+            "selected_factors": selected_factors,
+            "fitted_dev": fitted_dev,
+            "dev": dev,
+            "developed": developed,
+        }
 
     @staticmethod
     def _exclude_origin_drop_pairs(triangle, excluded_origins: list[str]) -> list[tuple]:
@@ -211,20 +283,110 @@ class ChainladderAdapter(EngineAdapter):
         return pairs
 
     @staticmethod
-    def _development_factors(dev, tail: dict) -> list[dict]:
+    def _exclude_factor_point_drop_pairs(triangle, excluded_factor_points: list[dict]) -> list[tuple]:
+        rank_to_raw_age = ChainladderAdapter._rank_to_raw_development_age(triangle)
+        origin_labels = {str(o) for o in triangle.origin.year}
+        pairs = []
+        for point in excluded_factor_points:
+            if not isinstance(point, dict):
+                continue
+            origin_label = str(point.get("origin") or "").strip()
+            if origin_label not in origin_labels:
+                continue
+            try:
+                from_dev = int(point.get("from_dev"))
+            except (TypeError, ValueError):
+                continue
+            raw_age = rank_to_raw_age.get(from_dev)
+            if raw_age is not None:
+                pairs.append((origin_label, raw_age))
+        return pairs
+
+    @staticmethod
+    def _selected_factor_development(triangle, fitted_dev, selected_factors: list[dict]):
+        patterns = ChainladderAdapter._ldf_patterns_by_raw_age(fitted_dev)
+        rank_to_raw_age = ChainladderAdapter._rank_to_raw_development_age(triangle)
+        for selection in selected_factors:
+            from_dev = int(selection["from_dev"])
+            if from_dev not in rank_to_raw_age:
+                raise ValueError(f"selected factor from_dev is not in the triangle development ages: {from_dev}")
+            factor = float(selection["factor"])
+            if not np.isfinite(factor) or factor <= 0:
+                raise ValueError(f"selected factor must be a positive finite number: {factor!r}")
+            patterns[rank_to_raw_age[from_dev]] = factor
+        return cl.DevelopmentConstant(patterns=patterns, style="ldf").fit(triangle)
+
+    @staticmethod
+    def _rank_to_raw_development_age(triangle) -> dict[int, int]:
+        return {i + 1: int(age) for i, age in enumerate(list(triangle.development)[:-1])}
+
+    @staticmethod
+    def _ldf_patterns_by_raw_age(dev) -> dict[int, float]:
         ldf_frame = dev.ldf_.to_frame()
-        sigma_frame = dev.sigma_.to_frame()
+        patterns: dict[int, float] = {}
+        for label in ldf_frame.columns:
+            raw_age = int(str(label).split("-")[0])
+            patterns[raw_age] = float(ldf_frame.iloc[0][label])
+        return patterns
+
+    @staticmethod
+    def _selected_factor_by_from_dev(selected_factors: list[dict]) -> dict[int, dict]:
+        return {int(selection["from_dev"]): dict(selection) for selection in selected_factors}
+
+    @staticmethod
+    def _development_factors(
+        dev,
+        tail: dict,
+        *,
+        triangle=None,
+        basis: str | None = None,
+        selected_factors: list[dict] | None = None,
+        fitted_dev=None,
+        excluded_origins: list[str] | None = None,
+        excluded_valuations: list[str] | None = None,
+        excluded_factor_points: list[dict] | None = None,
+    ) -> list[dict]:
+        ldf_frame = dev.ldf_.to_frame()
+        sigma_frame = dev.sigma_.to_frame() if hasattr(dev, "sigma_") else None
+        fitted_ldf_frame = fitted_dev.ldf_.to_frame() if fitted_dev is not None else ldf_frame
         labels = list(ldf_frame.columns)
+        detail_by_from_dev = (
+            ChainladderAdapter._factor_detail_by_from_dev(
+                triangle,
+                excluded_origins=excluded_origins or [],
+                excluded_valuations=excluded_valuations or [],
+                excluded_factor_points=excluded_factor_points or [],
+            )
+            if triangle is not None
+            else {}
+        )
+        selections = ChainladderAdapter._selected_factor_by_from_dev(selected_factors or [])
         factors = []
         for i, label in enumerate(labels):
-            factors.append(
-                {
-                    "from_dev": i + 1,
-                    "to_dev": i + 2,
-                    "ldf": float(ldf_frame.iloc[0][label]),
-                    "sigma": float(sigma_frame.iloc[0][label]),
-                }
-            )
+            from_dev = i + 1
+            ldf = float(ldf_frame.iloc[0][label])
+            selection = selections.get(from_dev)
+            row = {
+                "from_dev": from_dev,
+                "to_dev": i + 2,
+                "ldf": ldf,
+                "sigma": float(sigma_frame.iloc[0][label]) if sigma_frame is not None else None,
+            }
+            if triangle is not None:
+                detail = detail_by_from_dev.get(from_dev, {})
+                row.update(
+                    {
+                        "from_age": detail.get("from_age"),
+                        "to_age": detail.get("to_age"),
+                        "selected_factor": ldf,
+                        "fitted_factor": float(fitted_ldf_frame.iloc[0][label]),
+                        "factor_basis": selection.get("basis") if selection else basis,
+                        "link_ratios": detail.get("link_ratios", []),
+                        "candidate_averages": detail.get("candidate_averages", {}),
+                        "candidate_average_notes": detail.get("candidate_average_notes", {}),
+                    }
+                )
+            factors.append(row)
         if tail["type"] == "constant":
             factors.append(
                 {
@@ -234,7 +396,133 @@ class ChainladderAdapter(EngineAdapter):
                     "sigma": None,
                 }
             )
+        if triangle is not None:
+            ChainladderAdapter._attach_cumulative_development_factors(factors)
         return factors
+
+    @staticmethod
+    def _attach_cumulative_development_factors(factors: list[dict]) -> None:
+        running = 1.0
+        for row in reversed(factors):
+            ldf = row.get("ldf")
+            if ldf is None or not np.isfinite(float(ldf)):
+                running = float("nan")
+                row["cumulative_development_factor"] = None
+                continue
+            running *= float(ldf)
+            row["cumulative_development_factor"] = float(running) if np.isfinite(running) else None
+
+    @staticmethod
+    def _factor_detail_by_from_dev(
+        triangle,
+        *,
+        excluded_origins: list[str],
+        excluded_valuations: list[str],
+        excluded_factor_points: list[dict],
+    ) -> dict[int, dict]:
+        wide = triangle.to_frame()
+        ages = list(wide.columns)
+        excluded_origin_set = {str(origin) for origin in excluded_origins}
+        excluded_valuation_set = {str(valuation) for valuation in excluded_valuations}
+        excluded_point_set = {
+            (str(point.get("origin")), str(point.get("from_dev")))
+            for point in excluded_factor_points
+            if isinstance(point, dict)
+        }
+        details: dict[int, dict] = {}
+        for i, (from_age, to_age) in enumerate(zip(ages, ages[1:]), start=1):
+            link_ratios = []
+            for origin_ts, row in wide.iterrows():
+                origin = str(origin_ts.year)
+                if (
+                    origin in excluded_origin_set
+                    or str(to_age) in excluded_valuation_set
+                    or str(i + 1) in excluded_valuation_set
+                    or (origin, str(i)) in excluded_point_set
+                ):
+                    continue
+                current = row[from_age]
+                next_value = row[to_age]
+                if pd.isna(current) or pd.isna(next_value) or current == 0:
+                    continue
+                link_ratios.append(
+                    {
+                        "origin": origin,
+                        "from_dev": i,
+                        "to_dev": i + 1,
+                        "from_age": int(from_age),
+                        "to_age": int(to_age),
+                        "current_value": float(current),
+                        "next_value": float(next_value),
+                        "link_ratio": float(next_value / current),
+                    }
+                )
+            candidates, notes = ChainladderAdapter._candidate_averages(link_ratios)
+            details[i] = {
+                "from_age": int(from_age),
+                "to_age": int(to_age),
+                "link_ratios": link_ratios,
+                "candidate_averages": candidates,
+                "candidate_average_notes": notes,
+            }
+        return details
+
+    @staticmethod
+    def _candidate_averages(link_ratios: list[dict]) -> tuple[dict, dict]:
+        ratios = [row["link_ratio"] for row in link_ratios]
+        current_values = [row["current_value"] for row in link_ratios]
+        next_values = [row["next_value"] for row in link_ratios]
+
+        candidates = {
+            "volume_weighted": None,
+            "simple_average": None,
+            "last_3": None,
+            "last_5": None,
+            "all_years": None,
+            "trimmed_mean": None,
+            "median": None,
+        }
+        notes = {
+            "volume_weighted": "no link ratios available",
+            "simple_average": "no link ratios available",
+            "last_3": "requires at least 3 link ratios",
+            "last_5": "requires at least 5 link ratios",
+            "all_years": "same as simple_average for the unweighted all-year candidate",
+            "trimmed_mean": "requires at least 3 link ratios",
+            "median": "no link ratios available",
+        }
+        if not ratios:
+            return candidates, notes
+
+        total_current = float(sum(current_values))
+        if total_current > 0:
+            candidates["volume_weighted"] = float(sum(next_values) / total_current)
+            notes["volume_weighted"] = "available"
+        else:
+            notes["volume_weighted"] = "no positive denominator volume"
+
+        candidates["simple_average"] = float(sum(ratios) / len(ratios))
+        notes["simple_average"] = "available"
+        candidates["median"] = float(np.median(ratios))
+        notes["median"] = "available"
+
+        if len(ratios) >= 3:
+            sorted_ratios = sorted(ratios)
+            trimmed = sorted_ratios[1:-1]
+            candidates["trimmed_mean"] = float(sum(trimmed) / len(trimmed))
+            notes["trimmed_mean"] = "available"
+        else:
+            notes["trimmed_mean"] = f"requires at least 3 link ratios; found {len(ratios)}"
+
+        for size, key in ((3, "last_3"), (5, "last_5")):
+            if len(ratios) >= size:
+                last_values = ratios[-size:]
+                candidates[key] = float(sum(last_values) / size)
+                notes[key] = "available"
+            else:
+                notes[key] = f"requires at least {size} link ratios; found {len(ratios)}"
+
+        return candidates, notes
 
     @staticmethod
     def _by_origin(mack) -> list[dict]:
@@ -289,6 +577,45 @@ class ChainladderAdapter(EngineAdapter):
             "ultimate": _sum("ultimate"),
             "ibnr": _sum("ibnr"),
             "mack_se": float(mack.total_mack_std_err_.iloc[0, 0]),
+        }
+
+    @staticmethod
+    def _chain_ladder_by_origin(chain_ladder) -> list[dict]:
+        latest = chain_ladder.latest_diagonal.to_frame()
+        ultimate = chain_ladder.ultimate_.to_frame()
+        ibnr = chain_ladder.ibnr_.to_frame()
+        rows = []
+        for origin_ts, latest_row in latest.iterrows():
+            origin = str(origin_ts.year)
+            latest_value = float(latest_row.iloc[0])
+            ultimate_value = float(ultimate.loc[origin_ts].iloc[0])
+            ibnr_value = ibnr.loc[origin_ts].iloc[0]
+            if latest_value == ultimate_value and pd.isna(ibnr_value):
+                ibnr_value = 0.0
+            rows.append(
+                {
+                    "origin": origin,
+                    "latest": latest_value,
+                    "ultimate": ultimate_value,
+                    "ibnr": float(ibnr_value),
+                    "mack_se": None,
+                }
+            )
+        return rows
+
+    @staticmethod
+    def _chain_ladder_totals(by_origin: list[dict]) -> dict:
+        def _sum(field: str) -> float:
+            values = [row[field] for row in by_origin]
+            if any(np.isnan(v) for v in values):
+                return float("nan")
+            return float(sum(values))
+
+        return {
+            "latest": _sum("latest"),
+            "ultimate": _sum("ultimate"),
+            "ibnr": _sum("ibnr"),
+            "mack_se": None,
         }
 
     def diagnostics(self, tri: TriangleHandle, fit: FitResult) -> DiagnosticsResult:
