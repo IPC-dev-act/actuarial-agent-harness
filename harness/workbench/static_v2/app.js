@@ -95,19 +95,19 @@ async function api(path, options = {}) {
     ...options
   });
 
-  let body;
-  try {
-    body = await response.json();
-  } catch (_error) {
-    body = await response.text();
-  }
-
   if (!response.ok) {
-    const detail = typeof body === 'object' && body !== null ? body.detail || `${response.status} ${response.statusText}` : `${response.status} ${response.statusText}`;
+    const fallback = `${response.status} ${response.statusText}`;
+    const raw = await response.text();
+    let detail = raw || fallback;
+    try {
+      const body = JSON.parse(raw);
+      detail = body?.detail || fallback;
+    } catch {
+      // A plain-text response can still provide useful error details.
+    }
     throw new Error(detail);
   }
-
-  return body;
+  return response.json();
 }
 
 function safe(value) {
@@ -364,8 +364,6 @@ async function runLivePreview(requestId) {
     });
     if (requestId !== state.livePreviewRequestId) return;
     state.livePreview = preview;
-    // Auto-convert live preview to governed preview for workflow continuity
-    state.selectionSetPreview = preview;
     state.livePreviewPending = false;
     render();
   } catch (error) {
@@ -593,13 +591,11 @@ function LeftRail() {
 
 function CommandStrip() {
   const input = state.summary?.input_file || state.artifacts["manifest.json"]?.inputs?.[0]?.path || "No input";
-  const workflow = selectionWorkflowState();
-  const reportGateValue = (state.livePreview || state.selectionSetPreview) ? workflow.label : (state.readiness?.status || "n/a");
   return [
     ["Method", methodLabel(), ""],
     ["Input", input, "wide"],
     ["Status", state.status?.status || "n/a", "chip"],
-    ["Report gate", reportGateValue, "chip"]
+    ["Report gate", state.readiness?.status || "n/a", "chip"]
   ]
     .map(([label, value, extra]) => `
       <div class="command-cell ${safe(extra)}">
@@ -620,12 +616,11 @@ function MetricStrip() {
   const selected = preview?.comparison?.candidate || state.summary?.selected_scenario?.comparison?.candidate || {};
   const deltas = preview?.comparison?.deltas || state.comparison?.deltas || {};
   const selectedIbnr = selected.ibnr ?? state.summary?.selected_scenario?.key_metrics?.ibnr;
-  const hasPreview = state.selectionSetPreview || state.livePreview;
-  const staged = stagedChangeCount() > 0 && !hasPreview;
+  const staged = stagedChangeCount() > 0 && !state.selectionSetPreview && !state.livePreview;
   const recalculating = state.livePreviewPending && stagedChangeCount() > 0;
-  const live = Boolean(state.livePreview);
-  const selectedText = recalculating ? '<span class="metric-recalculating">Recalculating</span>' : (hasPreview && selectedIbnr !== undefined ? fmt(selectedIbnr) : 'preview required');
-  const deltaText = recalculating ? '<span class="metric-recalculating">Updating</span>' : (hasPreview && deltas.ibnr !== undefined ? fmt(deltas.ibnr) : staged ? `${stagedChangeCount()} staged` : fmt(deltas.ibnr || 0));
+  const live = Boolean(state.livePreview && !state.selectionSetPreview);
+  const selectedText = recalculating ? '<span class="metric-recalculating">Recalculating</span>' : fmt(selectedIbnr);
+  const deltaText = recalculating ? '<span class="metric-recalculating">Updating</span>' : fmt(deltas.ibnr);
   const exploreAction = state.workflowMode === "explore" && state.runId
     ? `<div class="metric metric-handoff-action"><button id="approveExploreButton" type="button" onclick="approveExploreAndContinue()"><span>Approve all</span><strong>Continue to report →</strong></button></div>`
     : "";
