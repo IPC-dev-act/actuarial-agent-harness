@@ -20,7 +20,8 @@ _CREATED_UTC_FALLBACK = "1970-01-01T00:00:00Z"
 
 
 def read_json(path: Path) -> dict[str, Any]:
-    return json.loads(Path(path).read_text())
+    # Older run artifacts may encode unavailable results as NaN or Infinity.
+    return json.loads(Path(path).read_text(), parse_constant=lambda _token: None)
 
 
 def maybe_read_json(run_dir: Path, filename: str) -> dict[str, Any] | None:

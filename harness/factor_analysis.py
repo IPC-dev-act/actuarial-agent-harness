@@ -98,24 +98,20 @@ def _run_exclusion(
     params["excluded_factor_points"] = [*params.get("excluded_factor_points", []), exclusion]
     _triangle, result = model_runner.fit_triangle(triangle_csv, "chain_ladder", params)
     candidate_fit = result.to_fit_json(run_id)
-    candidate_factor = _factor_for(candidate_fit, point["from_dev"]) or {}
+    candidate_row = _factor_for(candidate_fit, point["from_dev"]) or {}
+    candidate_factor = candidate_row.get("selected_factor", candidate_row.get("ldf"))
+    candidate_totals = candidate_fit.get("totals") or {}
+    candidate_ultimate = candidate_totals.get("ultimate")
+    candidate_ibnr = candidate_totals.get("ibnr")
+    base_totals = fit.get("totals") or {}
     return {
         "status": "available",
-        "candidate_factor": candidate_factor.get("selected_factor", candidate_factor.get("ldf")),
-        "candidate_ultimate": (candidate_fit.get("totals") or {}).get("ultimate"),
-        "candidate_ibnr": (candidate_fit.get("totals") or {}).get("ibnr"),
-        "delta_factor": _delta(
-            candidate_factor.get("selected_factor", candidate_factor.get("ldf")),
-            point.get("base_factor"),
-        ),
-        "delta_ultimate": _delta(
-            (candidate_fit.get("totals") or {}).get("ultimate"),
-            (fit.get("totals") or {}).get("ultimate"),
-        ),
-        "delta_ibnr": _delta(
-            (candidate_fit.get("totals") or {}).get("ibnr"),
-            (fit.get("totals") or {}).get("ibnr"),
-        ),
+        "candidate_factor": candidate_factor if _is_number(candidate_factor) else None,
+        "candidate_ultimate": candidate_ultimate if _is_number(candidate_ultimate) else None,
+        "candidate_ibnr": candidate_ibnr if _is_number(candidate_ibnr) else None,
+        "delta_factor": _delta(candidate_factor, point.get("base_factor")),
+        "delta_ultimate": _delta(candidate_ultimate, base_totals.get("ultimate")),
+        "delta_ibnr": _delta(candidate_ibnr, base_totals.get("ibnr")),
     }
 
 

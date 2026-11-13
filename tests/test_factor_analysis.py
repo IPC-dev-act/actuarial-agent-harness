@@ -71,6 +71,11 @@ def test_factor_analysis_is_deterministic_ranked_and_exposed_by_api(tmp_path):
     assert analysis["influence_ranking"][0]["delta_ibnr"] is not None
     assert payload["review_suggestions"]["generator"]["final_selection_authority"] is False
 
+    analysis_path = run_dir / "factor_analysis.json"
+    serialized = analysis_path.read_text()
+    assert "NaN" not in serialized
+    assert any(row["candidate_factor"] is None for row in analysis["influence_ranking"])
+
     hashes = (_sha(run_dir / "factor_analysis.json"), _sha(run_dir / "factor_review_suggestions.json"))
     second = _run_cli(*command)
     assert second.returncode == 0, second.stderr
@@ -81,6 +86,11 @@ def test_factor_analysis_is_deterministic_ranked_and_exposed_by_api(tmp_path):
     suggestions = client.get(f"/api/runs/{run_id}/factor-review-suggestions").json()
     assert len(suggestions["suggestions"]) >= 5
     assert client.get(f"/api/runs/{run_id}/artifacts/factor_analysis.json").status_code == 200
+
+    analysis_path.write_text(serialized.replace('"candidate_factor": null', '"candidate_factor": NaN'))
+    legacy = client.get(f"/api/runs/{run_id}/factor-analysis")
+    assert legacy.status_code == 200
+    assert legacy.json()["influence_ranking"] == analysis["influence_ranking"]
 
 
 def test_governed_preview_binds_review_dispositions_and_report_exhibits(tmp_path):
