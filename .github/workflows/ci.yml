@@ -32,8 +32,31 @@ jobs:
         run: python -m build --wheel
       - name: Verify packaged dashboard
         run: python -c "import glob, zipfile; p=glob.glob('dist/*.whl')[0]; n=zipfile.ZipFile(p).namelist(); assert any(x.endswith('harness/workbench/static_v2/app.js') for x in n); assert any(x.endswith('harness/workbench/static_v2/index.html') for x in n)"
+
+  databricks-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Build wheel
+        run: |
+          python -m pip install "build==1.5.0"
+          python -m build --wheel
       - name: Verify Databricks wheel
         run: python -c "import glob, zipfile; names=set(zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist()); assert {'databricks_demo/reserving.py', 'examples/raa.csv', 'examples/triangle_gapped.csv'} <= names"
+      - name: Test demo with the installed wheel on Python 3.11
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          NUMBA_NUM_THREADS: "1"
+        run: |
+          python -m pip install dist/*.whl "pytest==9.1.1"
+          cd "$RUNNER_TEMP"
+          python -m pytest -q --import-mode=importlib "$GITHUB_WORKSPACE/tests/test_databricks_demo.py"
       - name: Package Databricks demo
         uses: actions/upload-artifact@v4
         with:

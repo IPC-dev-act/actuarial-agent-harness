@@ -788,10 +788,11 @@ def _selection_factor_curve_svg(selection_set: dict) -> str:
     y_for = lambda value: 25 + (high - math.log(max(value, 1e-12))) / span * 155
     base_points = " ".join(f"{x_for(i):.1f},{y_for(base):.1f}" for i, (_, base, _) in enumerate(pairs))
     selected_points = " ".join(f"{x_for(i):.1f},{y_for(selected):.1f}" for i, (_, _, selected) in enumerate(pairs))
-    labels = "".join(
-        f'<text x="{x_for(i):.1f}" y="208" text-anchor="middle">{_esc(row.get("development_age") or f"{row.get('from_dev')}→{row.get('to_dev')}")}</text>'
-        for i, (row, _, _) in enumerate(pairs)
-    )
+    labels = []
+    for i, (row, _, _) in enumerate(pairs):
+        age = row.get("development_age") or f"{row.get('from_dev')}→{row.get('to_dev')}"
+        labels.append(f'<text x="{x_for(i):.1f}" y="208" text-anchor="middle">{_esc(age)}</text>')
+    labels_html = "".join(labels)
     return f"""
 <figure class="selection-exhibit">
 <figcaption>Base and governed selected development factor curve (log display scale)</figcaption>
@@ -800,7 +801,7 @@ def _selection_factor_curve_svg(selection_set: dict) -> str:
 <polyline points="{base_points}" fill="none" stroke="#7e776d" stroke-width="2" stroke-dasharray="5 4"/>
 <polyline points="{selected_points}" fill="none" stroke="#0f6e61" stroke-width="3"/>
 {''.join(f'<circle cx="{x_for(i):.1f}" cy="{y_for(selected):.1f}" r="4" fill="#0f6e61"><title>Selected {selected:.6f}</title></circle>' for i, (_, _, selected) in enumerate(pairs))}
-{labels}
+{labels_html}
 <text x="60" y="232" fill="#7e776d">-- base</text><text x="150" y="232" fill="#0f6e61">— selected</text>
 </svg>
 </figure>

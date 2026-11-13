@@ -17,10 +17,12 @@ still computes the reserves for one small triangle on the driver.
    root and use the wheel in `dist/` with [Reserving_Demo.py](Reserving_Demo.py).
 2. In **Workspace**, import `Reserving_Demo.py` and upload the wheel to the
    same folder. Open the resulting notebook and connect to **Serverless**.
-3. In the notebook's **Environment** pane, select an available CPU environment
-   with Python 3.12 (such as version 5 or 6). Add the wheel as a dependency
-   using its full `/Workspace/…/actuarial_agent_harness-0.2.9-py3-none-any.whl`
-   path and click **Apply**.
+3. In the notebook's **Environment** pane, select a **Standard** CPU environment.
+   Standard v6 uses Python 3.12. Standard v2 uses Python 3.11 and works with
+   the updated wheel. Add it as a dependency using its full
+   `/Workspace/…/actuarial_agent_harness-0.2.9.post1-py3-none-any.whl`
+   path and click **Apply**. If your notebook lists a previous harness wheel,
+   remove that dependency before applying the update.
 4. Run the setup cells to create the widgets. Use a writable Unity Catalog
    catalog and schema. A blank catalog uses the current catalog, and
    `schema` defaults to `default`. The workspace identity needs to be able to

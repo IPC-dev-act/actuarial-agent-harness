@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 
-from harness import factor_analysis, manifest, runs, selection_sets
+from harness import __version__, factor_analysis, manifest, runs, selection_sets
 from harness import factor_selection
 from harness.runs import RunNotFoundError
 from harness.workbench import chain_ladder, dashboard, decisions, explore, handoff, io, scenarios, schemas, state, tasks
@@ -111,7 +111,7 @@ def create_app(runs_root: Path | str | None = None) -> FastAPI:
     root = Path(runs_root or os.environ.get("RESERVE_RUNS_ROOT", runs.DEFAULT_RUNS_ROOT))
     app = FastAPI(
         title="Interactive Reserving Workbench",
-        version="0.2.9",
+        version=__version__,
         description="Local MVP API for audited human validation artifacts. No production authentication.",
     )
     app.state.runs_root = root
