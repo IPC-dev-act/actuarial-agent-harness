@@ -28,8 +28,9 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["harness", "harness.render", "harness.render.templates", "harness.workbench", "harness.workbench.static_v2", "engine"]
+packages = ["harness", "harness.render", "harness.render.templates", "harness.workbench", "harness.workbench.static_v2", "engine", "databricks_demo", "examples"]
 
 [tool.setuptools.package-data]
 "harness.render.templates" = ["*.html"]
 "harness.workbench.static_v2" = ["*.html", "*.js", "*.css"]
+"examples" = ["raa.csv", "triangle_gapped.csv"]
