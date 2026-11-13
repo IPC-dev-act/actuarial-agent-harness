@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
+import tempfile
 from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
@@ -86,7 +87,17 @@ def build_manifest(
 
 def write_manifest(run_dir: Path, manifest: dict[str, Any]) -> Path:
     path = Path(run_dir) / MANIFEST_FILENAME
-    path.write_text(json.dumps(manifest, indent=2) + "\n")
+    serialized = json.dumps(manifest, indent=2) + "\n"
+    handle = tempfile.NamedTemporaryFile(
+        mode="w", dir=path.parent, prefix=f".{path.name}.", delete=False
+    )
+    temporary = Path(handle.name)
+    try:
+        with handle:
+            handle.write(serialized)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
     return path
 
 
