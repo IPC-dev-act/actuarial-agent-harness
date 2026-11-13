@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reserve Workbench V2</title>
+    <link rel="stylesheet" href="/workbench-v2/styles.css?v=reserve-v2-20260713-editorial" />
+  </head>
+  <body>
+    <div class="v2-shell">
+      <aside class="v2-left" aria-label="Run navigation">
+        <button id="toggleLeftRail" class="rail-collapse-toggle left-rail-toggle" type="button" aria-controls="leftRailState" aria-expanded="true" title="Collapse navigation panel">&lt;</button>
+        <div class="v2-brand">
+          <p>Actuarial systems</p>
+          <h1>RESERVING.IO</h1>
+          <span>Reserve Workbench</span>
+        </div>
+
+        <section class="v2-rail-section">
+          <label for="runSelect">Run</label>
+          <select id="runSelect"></select>
+          <button id="refreshRun" class="ghost-button">Refresh</button>
+        </section>
+
+        <section class="v2-rail-section">
+          <p class="rail-label">Workflow state</p>
+          <div id="leftRailState"></div>
+        </section>
+
+        <a class="artifact-link" href="#artifacts" data-tab-link="artifacts">Artifacts</a>
+      </aside>
+
+      <main class="v2-main">
+        <header class="v2-command">
+          <div>
+            <p class="eyebrow">Run / deterministic reserving model</p>
+            <h1 id="runTitle">Select a run</h1>
+            <div id="runBadges" class="run-badges"></div>
+            <p id="runSubtitle">Claude operates the workflow. The actuary validates judgment. The engine computes.</p>
+          </div>
+          <div id="commandStrip" class="command-strip"></div>
+        </header>
+
+        <nav class="v2-tabs" aria-label="Workbench sections">
+          <button class="active" data-tab="overview">Overview</button>
+          <button data-tab="triangles">Development</button>
+          <button data-tab="scenarios">Scenarios</button>
+          <button data-tab="decisions">Decisions</button>
+          <button data-tab="report">Report</button>
+          <button data-tab="artifacts">Artifacts</button>
+        </nav>
+
+        <div id="globalMetricStrip"></div>
+
+        <section id="overviewPanel" class="v2-panel active"></section>
+        <section id="trianglesPanel" class="v2-panel"></section>
+        <section id="scenariosPanel" class="v2-panel"></section>
+        <section id="decisionsPanel" class="v2-panel"></section>
+        <section id="reportPanel" class="v2-panel"></section>
+        <section id="artifactsPanel" class="v2-panel"></section>
+      </main>
+
+      <aside class="v2-drawer" aria-label="Human validation">
+        <button id="toggleRightRail" class="rail-collapse-toggle right-rail-toggle" type="button" aria-controls="validationDrawer" aria-expanded="true" title="Collapse human validation panel">&gt;</button>
+        <div id="validationDrawer"></div>
+      </aside>
+    </div>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="/workbench-v2/app.js?v=reserve-v2-20260713-editorial"></script>
+  </body>
+</html>

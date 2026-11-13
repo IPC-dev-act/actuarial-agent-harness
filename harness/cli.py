@@ -19,9 +19,17 @@ import sys
 from pathlib import Path
 
 from engine.chainladder_adapter import ChainladderAdapter, parse_tail_param
-from harness import manifest, runs, sensitivity, triangle_io, triangle_projection, validation
+from harness import factor_analysis, manifest, model_runner, runs, selection_sets, sensitivity, triangle_io, triangle_projection, validation
 from harness.render import report_html
 from harness.runs import RunNotFoundError
+from harness.workbench import decisions as workbench_decisions
+from harness.workbench import io as workbench_io
+from harness.workbench import handoff as workbench_handoff
+from harness.workbench import scenarios as workbench_scenarios
+from harness.workbench import review_snapshots as workbench_review_snapshots
+from harness.workbench import state as workbench_state
+from harness.workbench import schemas as workbench_schemas
+from harness.workbench import tasks as workbench_tasks
 
 EXIT_SUCCESS = 0
 EXIT_INTERNAL_ERROR = 1
@@ -144,6 +152,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_sens.add_argument("--dry-run", action="store_true")
     p_sens.set_defaults(handler=cmd_sensitivity)
 
+    p_factor_analysis = subparsers.add_parser(
+        "factor-analysis",
+        help="Build deterministic BCL link-ratio influence and review-suggestion artifacts",
+    )
+    p_factor_analysis.add_argument("run_id")
+    _add_format_arg(p_factor_analysis)
+    _add_out_arg(p_factor_analysis)
+    p_factor_analysis.add_argument("--dry-run", action="store_true")
+    p_factor_analysis.set_defaults(handler=cmd_factor_analysis)
+
     p_runs = subparsers.add_parser("runs", help="Inventory of the runs root")
     runs_subparsers = p_runs.add_subparsers(
         dest="runs_action", required=True, parser_class=_ArgumentParser
@@ -163,9 +181,94 @@ def build_parser() -> argparse.ArgumentParser:
     p_report = subparsers.add_parser("report", help="Render a deterministic HTML review of an existing run")
     p_report.add_argument("run_id")
     p_report.add_argument("--format-out", choices=["html", "md"], default="html")
+    p_report.add_argument("--require-approval", action="store_true")
     _add_out_arg(p_report)
     p_report.add_argument("--dry-run", action="store_true")
     p_report.set_defaults(handler=cmd_report)
+
+    p_tasks = subparsers.add_parser("tasks", help="Build/list pending workbench validation tasks")
+    p_tasks.add_argument("run_id")
+    _add_format_arg(p_tasks)
+    _add_out_arg(p_tasks)
+    p_tasks.add_argument("--dry-run", action="store_true")
+    p_tasks.set_defaults(handler=cmd_tasks)
+
+    p_status = subparsers.add_parser("status", help="Show derived workbench run status")
+    p_status.add_argument("run_id")
+    _add_format_arg(p_status)
+    _add_out_arg(p_status)
+    p_status.set_defaults(handler=cmd_status)
+
+    p_handoff = subparsers.add_parser("handoff", help="Build the structured AI-to-actuary review handoff")
+    p_handoff.add_argument("run_id")
+    _add_format_arg(p_handoff)
+    _add_out_arg(p_handoff)
+    p_handoff.add_argument("--dry-run", action="store_true")
+    p_handoff.set_defaults(handler=cmd_handoff)
+
+    p_scenarios = subparsers.add_parser("scenarios", help="Build/list workbench scenario candidates")
+    p_scenarios.add_argument("run_id")
+    _add_format_arg(p_scenarios)
+    _add_out_arg(p_scenarios)
+    p_scenarios.add_argument("--dry-run", action="store_true")
+    p_scenarios.set_defaults(handler=cmd_scenarios)
+
+    p_compare = subparsers.add_parser("compare", help="Compare a scenario candidate against the base run")
+    p_compare.add_argument("run_id")
+    p_compare.add_argument("--scenario-id", required=True)
+    _add_format_arg(p_compare)
+    _add_out_arg(p_compare)
+    p_compare.add_argument("--dry-run", action="store_true")
+    p_compare.set_defaults(handler=cmd_compare)
+
+    p_selection_sets = subparsers.add_parser("selection-sets", help="List, preview, and commit governed selection sets")
+    selection_set_subparsers = p_selection_sets.add_subparsers(
+        dest="selection_sets_action", required=True, parser_class=_ArgumentParser
+    )
+
+    p_selection_sets_list = selection_set_subparsers.add_parser("list")
+    p_selection_sets_list.add_argument("run_id")
+    _add_format_arg(p_selection_sets_list)
+    _add_out_arg(p_selection_sets_list)
+    p_selection_sets_list.set_defaults(handler=cmd_selection_sets_list)
+
+    p_selection_sets_show = selection_set_subparsers.add_parser("show")
+    p_selection_sets_show.add_argument("run_id")
+    p_selection_sets_show.add_argument("selection_set_id")
+    _add_format_arg(p_selection_sets_show)
+    _add_out_arg(p_selection_sets_show)
+    p_selection_sets_show.set_defaults(handler=cmd_selection_sets_show)
+
+    p_selection_sets_preview = selection_set_subparsers.add_parser("preview")
+    p_selection_sets_preview.add_argument("run_id")
+    p_selection_sets_preview.add_argument("--request-file", type=Path, required=True)
+    _add_format_arg(p_selection_sets_preview)
+    _add_out_arg(p_selection_sets_preview)
+    p_selection_sets_preview.add_argument("--dry-run", action="store_true")
+    p_selection_sets_preview.set_defaults(handler=cmd_selection_sets_preview)
+
+    p_selection_sets_commit = selection_set_subparsers.add_parser("commit")
+    p_selection_sets_commit.add_argument("run_id")
+    p_selection_sets_commit.add_argument("--selection-set-id", required=True)
+    p_selection_sets_commit.add_argument("--decision-file", type=Path, required=True)
+    _add_format_arg(p_selection_sets_commit)
+    _add_out_arg(p_selection_sets_commit)
+    p_selection_sets_commit.add_argument("--dry-run", action="store_true")
+    p_selection_sets_commit.set_defaults(handler=cmd_selection_sets_commit)
+
+    p_dashboard = subparsers.add_parser("dashboard", help="Start the local workbench dashboard")
+    _add_out_arg(p_dashboard)
+    p_dashboard.add_argument("--host", default="127.0.0.1")
+    p_dashboard.add_argument("--port", type=int, default=8000)
+    p_dashboard.set_defaults(handler=cmd_dashboard)
+
+    p_decide = subparsers.add_parser("decide", help="Commit an immutable workbench decision artifact")
+    p_decide.add_argument("run_id")
+    p_decide.add_argument("--decision-file", type=Path, required=True)
+    _add_format_arg(p_decide)
+    _add_out_arg(p_decide)
+    p_decide.add_argument("--dry-run", action="store_true")
+    p_decide.set_defaults(handler=cmd_decide)
 
     return parser
 
@@ -175,6 +278,20 @@ def _split_list_arg(raw: str) -> list[str]:
 
 
 def _invocation_string(command: str, args: argparse.Namespace) -> str:
+    """Reconstructs the effective invocation for the manifest's `command`
+    field. Every flag a subcommand can take is represented — `hasattr`
+    naturally scopes each one to the subcommands that declare it (e.g.
+    `--averaging` only ever appears for `fit`) — so a non-default `fit`
+    (custom averaging, tail, exclusions, sigma-interpolation) is fully
+    legible from the manifest alone, not just the ones that happened to
+    differ from argparse's own defaults. Found by independent review
+    (v0.1.14): an earlier version of this function recorded only
+    `triangle_csv`/`run_id`/`--method`/`--basis`/`--format`/`--out`/
+    `--dry-run`, silently dropping every other `fit` parameter from the
+    audit trail's command string (the *effective* parameters were always
+    safe — they live in `fit.json`/manifest `parameters`, independent of
+    this string — but the human/agent-facing command narration was not).
+    """
     parts = [f"reserve {command}"]
     if getattr(args, "triangle_csv", None) is not None:
         parts.append(str(args.triangle_csv))
@@ -182,8 +299,22 @@ def _invocation_string(command: str, args: argparse.Namespace) -> str:
         parts.append(str(args.run_id))
     if hasattr(args, "method"):
         parts.append(f"--method {args.method}")
+    if hasattr(args, "averaging"):
+        parts.append(f"--averaging {args.averaging}")
+    if hasattr(args, "tail"):
+        parts.append(f"--tail {args.tail}")
+    if getattr(args, "n_periods", None) is not None:
+        parts.append(f"--n-periods {args.n_periods}")
+    if getattr(args, "exclude_origins", ""):
+        parts.append(f"--exclude-origins {args.exclude_origins}")
+    if getattr(args, "exclude_valuations", ""):
+        parts.append(f"--exclude-valuations {args.exclude_valuations}")
     if getattr(args, "basis", None) is not None:
         parts.append(f"--basis {args.basis}")
+    if hasattr(args, "sigma_interpolation"):
+        parts.append(f"--sigma-interpolation {args.sigma_interpolation}")
+    if hasattr(args, "grid"):
+        parts.append(f"--grid {args.grid}")
     parts.append(f"--format {args.format}")
     if hasattr(args, "out"):
         parts.append(f"--out {args.out}")
@@ -367,8 +498,12 @@ def cmd_fit(args: argparse.Namespace) -> int:
         "sigma_interpolation": args.sigma_interpolation,
     }
 
-    tri_handle = adapter.load_triangle(args.triangle_csv)
-    fit_result = adapter.fit(tri_handle, args.method, params)
+    tri_handle, fit_result = model_runner.fit_triangle(
+        args.triangle_csv,
+        args.method,
+        params,
+        adapter=adapter,
+    )
     fit_warnings = _detect_fit_warnings(fit_result)
     exit_code = EXIT_MODEL_WARNING if fit_warnings else EXIT_SUCCESS
 
@@ -424,10 +559,14 @@ def _detect_fit_warnings(fit_result) -> list[dict]:
     """
     warnings_found = []
     for field_name, value in fit_result.totals.items():
+        if value is None:
+            continue
         if not math.isfinite(value):
             warnings_found.append({"warning": "non_finite_total", "field": field_name})
     for row in fit_result.by_origin:
         for field_name in ("ultimate", "ibnr", "mack_se"):
+            if row[field_name] is None:
+                continue
             if not math.isfinite(row[field_name]):
                 warnings_found.append(
                     {"warning": "non_finite_by_origin", "origin": row["origin"], "field": field_name}
@@ -565,6 +704,14 @@ def _print_payload(fmt: str, payload: dict, text_renderer) -> None:
         print(text_renderer(payload))
 
 
+def _format_number_text(value, *, decimals: int = 1) -> str:
+    if value is None:
+        return "n/a"
+    if isinstance(value, float) and not math.isfinite(value):
+        return "undefined"
+    return f"{value:.{decimals}f}"
+
+
 def _render_fit_text(payload: dict, run_id: str) -> str:
     lines = [
         f"run_id:  {run_id}",
@@ -577,13 +724,17 @@ def _render_fit_text(payload: dict, run_id: str) -> str:
     lines.append("by_origin:")
     for row in payload["by_origin"]:
         lines.append(
-            f"  {row['origin']}: latest={row['latest']:.1f} ultimate={row['ultimate']:.1f} "
-            f"ibnr={row['ibnr']:.1f} mack_se={row['mack_se']:.1f}"
+            f"  {row['origin']}: latest={_format_number_text(row['latest'])} "
+            f"ultimate={_format_number_text(row['ultimate'])} "
+            f"ibnr={_format_number_text(row['ibnr'])} "
+            f"mack_se={_format_number_text(row['mack_se'])}"
         )
     t = payload["totals"]
     lines.append(
-        f"totals: latest={t['latest']:.1f} ultimate={t['ultimate']:.1f} "
-        f"ibnr={t['ibnr']:.1f} mack_se={t['mack_se']:.1f}"
+        f"totals: latest={_format_number_text(t['latest'])} "
+        f"ultimate={_format_number_text(t['ultimate'])} "
+        f"ibnr={_format_number_text(t['ibnr'])} "
+        f"mack_se={_format_number_text(t['mack_se'])}"
     )
     return "\n".join(lines)
 
@@ -641,6 +792,7 @@ def _params_from_fit_payload(parameters: dict) -> dict:
         # .get(), not [] — a fit.json persisted before this parameter
         # existed won't have the key; falls back to the current default.
         "sigma_interpolation": parameters.get("sigma_interpolation", "mack"),
+        "selected_factors": parameters.get("selected_factors", []),
     }
 
 
@@ -728,13 +880,33 @@ def cmd_sensitivity(args: argparse.Namespace) -> int:
 
     payload = {
         "run_id": args.run_id,
+        # v0.1.14: the base fit's parameters *as perturbed by this call's own*
+        # --exclude-origins/--exclude-valuations (base_params, not
+        # fit_payload["parameters"]) — without this, those CLI-supplied
+        # baseline exclusions were not reconstructable from sensitivity.json
+        # alone; every scenario's delta_from_base was relative to a baseline
+        # the file never actually recorded. Found by independent review.
+        "base_parameters": base_params,
         "scenarios": scenario_rows,
         "range": sensitivity.compute_range(base_ibnr, scenario_ibnr_values),
     }
 
     if not args.dry_run:
         (run_dir / "sensitivity.json").write_text(_dump_json(payload) + "\n")
-        manifest.update_manifest(run_dir, add_outputs=["sensitivity.json"], exit_code=EXIT_SUCCESS)
+        # sensitivity computes supplementary scenarios over an existing fit;
+        # unlike fit/diagnostics it carries no pass/warn verdict of its own
+        # (always exit 0 — docs/cli-spec.md). update_manifest's normal
+        # contract overwrites exit_code with "the latest command's code",
+        # which is correct for a genuine new assessment but was silently
+        # erasing a real diagnostics warning (exit 3) once sensitivity ran
+        # afterwards — a warned run could then read as clean from `reserve
+        # runs list`. Found by independent review (v0.1.14). Fixed the same
+        # way `report` already handles this (see cmd_report): carry the
+        # run's current exit_code forward instead of overwriting it.
+        current = manifest.read_manifest(run_dir)
+        manifest.update_manifest(
+            run_dir, add_outputs=["sensitivity.json"], exit_code=current["exit_code"]
+        )
 
     _log_run(args.run_id, args.out, args.dry_run, ["sensitivity.json"])
     _print_payload(args.format, payload, lambda p: _render_sensitivity_text(p, args.run_id))
@@ -748,11 +920,15 @@ def _render_sensitivity_text(payload: dict, run_id: str) -> str:
         t = row["totals"]
         lines.append(
             f"  {row['scenario_id']:<22} {delta['parameter']}={delta['value']!r:<14} "
-            f"ultimate={t['ultimate']:.1f} ibnr={t['ibnr']:.1f} mack_se={t['mack_se']:.1f}"
+            f"ultimate={_format_number_text(t['ultimate'])} "
+            f"ibnr={_format_number_text(t['ibnr'])} "
+            f"mack_se={_format_number_text(t['mack_se'])}"
         )
     r = payload["range"]
     lines.append(
-        f"range: base_ibnr={r['base_ibnr']:.1f} ibnr_min={r['ibnr_min']:.1f} ibnr_max={r['ibnr_max']:.1f}"
+        f"range: base_ibnr={_format_number_text(r['base_ibnr'])} "
+        f"ibnr_min={_format_number_text(r['ibnr_min'])} "
+        f"ibnr_max={_format_number_text(r['ibnr_max'])}"
     )
     return "\n".join(lines)
 
@@ -810,6 +986,11 @@ def cmd_report(args: argparse.Namespace) -> int:
     if incomplete_reason is not None:
         print(f"usage error: {incomplete_reason}", file=sys.stderr)
         return EXIT_USAGE_ERROR
+    if args.require_approval:
+        approval_error = _report_approval_gate_error(args.run_id, run_dir)
+        if approval_error is not None:
+            print(f"usage error: {approval_error}", file=sys.stderr)
+            return EXIT_USAGE_ERROR
 
     html_text = report_html.render(args.run_id, run_dir)
     report_path = run_dir / "report.html"
@@ -827,6 +1008,582 @@ def cmd_report(args: argparse.Namespace) -> int:
     _log_run(args.run_id, args.out, args.dry_run, ["report.html"])
     print(str(report_path))
     return EXIT_SUCCESS
+
+
+def _active_decisions_by_type(run_dir: Path, decision_type: str) -> list[dict]:
+    return [
+        decision
+        for decision in workbench_io.active_decisions(workbench_io.load_decisions(run_dir))
+        if decision.get("decision_type") == decision_type
+        and decision.get("status") in {"accepted", "modified"}
+    ]
+
+
+def _decision_artifacts_are_current(run_dir: Path, decision: dict) -> bool:
+    reviewed = decision.get("source_artifacts_reviewed", [])
+    if not isinstance(reviewed, list):
+        return False
+    material_reviewed = [name for name in reviewed if name != "manifest.json"]
+    expected = {
+        name: digest
+        for name, digest in (decision.get("input_hashes") or {}).items()
+        if name in material_reviewed
+    }
+    return workbench_io.artifact_hashes(run_dir, material_reviewed) == expected
+
+
+def _report_approval_gate_error(run_id: str, run_dir: Path) -> str | None:
+    task_payload = workbench_tasks.build_validation_tasks(run_id, run_dir)
+    pending = [task for task in task_payload.get("tasks", []) if task.get("status") == "pending"]
+    prerequisite_pending = [
+        task
+        for task in pending
+        if task.get("task_type") in {"warning_review", "scenario_selection", "bcl_review"}
+    ]
+    if prerequisite_pending:
+        titles = "; ".join(task.get("title", task["task_id"]) for task in prerequisite_pending)
+        return f"unresolved required workbench tasks remain: {titles}"
+
+    committed_selection_sets = [
+        selection_set
+        for selection_set in selection_sets.list_selection_sets(run_dir)
+        if selection_set.get("status") == "committed"
+    ]
+    all_decisions = workbench_io.load_decisions(run_dir)
+    active_selection_approvals = _active_decisions_by_type(run_dir, "selection_set_approval")
+    approved_selection_ids = {
+        decision.get("selection_set_id")
+        for decision in all_decisions
+        if decision.get("decision_type") == "selection_set_approval"
+        and decision.get("status") in {"accepted", "modified"}
+        if decision.get("selection_set_id")
+    }
+    missing_selection_approvals = [
+        selection_set.get("selection_set_id")
+        for selection_set in committed_selection_sets
+        if selection_set.get("selection_set_id") not in approved_selection_ids
+    ]
+    if missing_selection_approvals:
+        return (
+            "committed selection set exists without active selection_set_approval decision: "
+            + ", ".join(str(selection_id) for selection_id in missing_selection_approvals)
+        )
+
+    if len(active_selection_approvals) > 1:
+        return "multiple active selection_set_approval decisions exist; the reporting basis is ambiguous"
+
+    stale_selection_approvals = [
+        decision.get("decision_id")
+        for decision in active_selection_approvals
+        if not _decision_artifacts_are_current(run_dir, decision)
+    ]
+    if stale_selection_approvals:
+        return (
+            "selection_set_approval decision source artifacts are stale; recommit approval: "
+            + ", ".join(str(decision_id) for decision_id in stale_selection_approvals)
+        )
+
+    report_approvals = _active_decisions_by_type(run_dir, "report_approval")
+    if not report_approvals:
+        return "report approval decision is required; commit a report_approval decision before using --require-approval"
+
+    stale_report_approvals = [
+        decision.get("decision_id")
+        for decision in report_approvals
+        if not _decision_artifacts_are_current(run_dir, decision)
+    ]
+    if stale_report_approvals:
+        return (
+            "report_approval decision source artifacts are stale; recommit report approval: "
+            + ", ".join(str(decision_id) for decision_id in stale_report_approvals)
+        )
+
+    for approval in report_approvals:
+        snapshot_id = str(approval.get("review_snapshot_id") or "").strip()
+        if not snapshot_id:
+            return "report_approval decision is not bound to a review snapshot; recommit report approval"
+        try:
+            snapshot = workbench_review_snapshots.load_review_snapshot(run_dir, snapshot_id)
+        except workbench_review_snapshots.ReviewSnapshotError as exc:
+            return str(exc)
+        if snapshot is None:
+            return f"report approval review snapshot is missing: {snapshot_id}"
+        try:
+            workbench_review_snapshots.validate_review_snapshot(run_id, run_dir, snapshot)
+        except workbench_review_snapshots.ReviewSnapshotError as exc:
+            return f"report approval review snapshot is stale: {exc}"
+
+    if pending:
+        titles = "; ".join(task.get("title", task["task_id"]) for task in pending)
+        return f"unresolved workbench tasks remain: {titles}"
+    return None
+
+
+def _append_outputs_preserving_exit(run_dir: Path, outputs: list[str]) -> None:
+    manifest_path = Path(run_dir) / "manifest.json"
+    if not manifest_path.is_file():
+        return
+    current = manifest.read_manifest(run_dir)
+    manifest.update_manifest(run_dir, add_outputs=outputs, exit_code=current["exit_code"])
+
+
+def cmd_tasks(args: argparse.Namespace) -> int:
+    try:
+        run_dir = runs.resolve_run_dir(args.run_id, out_root=args.out)
+    except RunNotFoundError as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    if args.dry_run:
+        payload = workbench_tasks.build_validation_tasks(args.run_id, run_dir)
+    else:
+        payload = workbench_tasks.write_validation_tasks(args.run_id, run_dir)
+        _append_outputs_preserving_exit(run_dir, ["validation_tasks.json"])
+
+    _log_run(args.run_id, args.out, args.dry_run, ["validation_tasks.json"])
+    _print_payload(args.format, payload, _render_tasks_text)
+    return EXIT_SUCCESS
+
+
+def _render_tasks_text(payload: dict) -> str:
+    lines = [f"run_id: {payload['run_id']}", f"status: {payload['status']}", "tasks:"]
+    if not payload["tasks"]:
+        lines.append("  none")
+        return "\n".join(lines)
+    for task in payload["tasks"]:
+        lines.append(
+            f"  [{task['status'].upper():9}] {task['task_id']} "
+            f"{task['task_type']} {task['title']}"
+        )
+    return "\n".join(lines)
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    try:
+        run_dir = runs.resolve_run_dir(args.run_id, out_root=args.out)
+    except RunNotFoundError as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    payload = workbench_state.derive_status(args.run_id, run_dir)
+    _print_payload(args.format, payload, _render_status_text)
+    return EXIT_SUCCESS
+
+
+def _render_status_text(payload: dict) -> str:
+    lines = [
+        f"run_id: {payload['run_id']}",
+        f"status: {payload['status']}",
+        f"unresolved_tasks: {payload['unresolved_task_count']}",
+        f"completed_decisions: {payload['completed_decision_count']}",
+    ]
+    if payload["missing_required_artifacts"]:
+        lines.append(f"missing_required_artifacts: {', '.join(payload['missing_required_artifacts'])}")
+    return "\n".join(lines)
+
+
+def cmd_handoff(args: argparse.Namespace) -> int:
+    try:
+        run_dir = runs.resolve_run_dir(args.run_id, out_root=args.out)
+    except RunNotFoundError as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    payload = (
+        workbench_handoff.build_review_handoff(args.run_id, run_dir)
+        if args.dry_run
+        else workbench_handoff.write_review_handoff(args.run_id, run_dir)
+    )
+    if not args.dry_run:
+        _append_outputs_preserving_exit(run_dir, [workbench_schemas.HANDOFF_FILENAME])
+    _log_run(args.run_id, args.out, args.dry_run, [workbench_schemas.HANDOFF_FILENAME])
+    _print_payload(args.format, payload, _render_handoff_text)
+    return EXIT_SUCCESS
+
+
+def _render_handoff_text(payload: dict) -> str:
+    lines = [
+        f"run_id: {payload['run_id']}",
+        f"phase: {payload['phase']}",
+        f"method: {payload['display_method']}",
+        f"report_readiness: {payload['report_readiness']}",
+        f"resume_command: {payload['resume_command']}",
+        "pending_judgment:",
+    ]
+    for task in payload.get("pending_judgment", []):
+        lines.append(f"  {task['task_id']}: {task['title']}")
+    if not payload.get("pending_judgment"):
+        lines.append("  none")
+    return "\n".join(lines)
+
+
+def cmd_scenarios(args: argparse.Namespace) -> int:
+    try:
+        run_dir = runs.resolve_run_dir(args.run_id, out_root=args.out)
+    except RunNotFoundError as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    if args.dry_run:
+        payload = workbench_scenarios.build_scenario_index(args.run_id, run_dir)
+    else:
+        payload = workbench_scenarios.write_scenario_index(args.run_id, run_dir)
+        _append_outputs_preserving_exit(run_dir, ["scenario_index.json"])
+
+    _log_run(args.run_id, args.out, args.dry_run, ["scenario_index.json"])
+    _print_payload(args.format, payload, _render_scenarios_text)
+    return EXIT_SUCCESS
+
+
+def cmd_factor_analysis(args: argparse.Namespace) -> int:
+    try:
+        run_dir = runs.resolve_run_dir(args.run_id, out_root=args.out)
+        if args.dry_run:
+            analysis = factor_analysis.build_factor_analysis(args.run_id, run_dir)
+            suggestions = factor_analysis.build_review_suggestions(analysis)
+        else:
+            analysis, suggestions = factor_analysis.write_factor_analysis(args.run_id, run_dir)
+            _append_outputs_preserving_exit(
+                run_dir,
+                [
+                    workbench_schemas.FACTOR_ANALYSIS_FILENAME,
+                    workbench_schemas.FACTOR_REVIEW_SUGGESTIONS_FILENAME,
+                ],
+            )
+    except (RunNotFoundError, factor_analysis.FactorAnalysisError) as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    filenames = [
+        workbench_schemas.FACTOR_ANALYSIS_FILENAME,
+        workbench_schemas.FACTOR_REVIEW_SUGGESTIONS_FILENAME,
+    ]
+    _log_run(args.run_id, args.out, args.dry_run, filenames)
+    payload = {
+        "run_id": args.run_id,
+        "analysis": analysis,
+        "review_suggestions": suggestions,
+    }
+    _print_payload(args.format, payload, _render_factor_analysis_text)
+    return EXIT_SUCCESS
+
+
+def _render_factor_analysis_text(payload: dict) -> str:
+    analysis = payload["analysis"]
+    suggestions = payload["review_suggestions"].get("suggestions", [])
+    return "\n".join(
+        [
+            f"run_id: {payload['run_id']}",
+            f"analysis_id: {analysis['analysis_id']}",
+            f"development_periods: {len(analysis.get('development_periods', []))}",
+            f"influence_points: {len(analysis.get('influence_ranking', []))}",
+            f"review_suggestions: {len(suggestions)}",
+            "governance: suggestions are exploratory; preview and committed approval remain required",
+        ]
+    )
+
+
+def _render_scenarios_text(payload: dict) -> str:
+    lines = [f"run_id: {payload['run_id']}", f"status: {payload['status']}", "scenarios:"]
+    if not payload["scenarios"]:
+        lines.append("  none")
+        return "\n".join(lines)
+    for scenario in payload["scenarios"]:
+        metrics = scenario.get("key_metrics", {})
+        ibnr = metrics.get("ibnr")
+        ibnr_text = "n/a" if ibnr is None else f"{ibnr:.1f}"
+        lines.append(
+            f"  [{scenario['status']:<10}] {scenario['scenario_id']:<22} "
+            f"{scenario['scenario_type']:<12} ibnr={ibnr_text}"
+        )
+    return "\n".join(lines)
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    try:
+        run_dir = runs.resolve_run_dir(args.run_id, out_root=args.out)
+    except RunNotFoundError as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    try:
+        if args.dry_run:
+            payload = workbench_scenarios.build_comparison(args.run_id, run_dir, args.scenario_id)
+        else:
+            workbench_scenarios.write_scenario_index(args.run_id, run_dir)
+            payload = workbench_scenarios.write_comparison(args.run_id, run_dir, args.scenario_id)
+            _append_outputs_preserving_exit(
+                run_dir,
+                [
+                    "scenario_index.json",
+                    f"comparisons/{payload['comparison_id']}.json",
+                ],
+            )
+    except workbench_scenarios.ScenarioValidationError as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    filenames = ["scenario_index.json", f"comparisons/{payload['comparison_id']}.json"]
+    _log_run(args.run_id, args.out, args.dry_run, filenames)
+    _print_payload(args.format, payload, _render_comparison_text)
+    return EXIT_SUCCESS
+
+
+def _render_comparison_text(payload: dict) -> str:
+    lines = [
+        f"comparison_id: {payload['comparison_id']}",
+        f"base_run_id: {payload['base_run_id']}",
+        f"candidate_scenario_id: {payload['candidate_scenario_id']}",
+        "deltas:",
+    ]
+    for name, value in payload["deltas"].items():
+        text = "n/a" if value is None else f"{value:.1f}"
+        lines.append(f"  {name}: {text}")
+    return "\n".join(lines)
+
+
+def cmd_selection_sets_list(args: argparse.Namespace) -> int:
+    try:
+        run_dir = runs.resolve_run_dir(args.run_id, out_root=args.out)
+    except RunNotFoundError as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+    payload = {
+        "schema_version": "0.1",
+        "run_id": args.run_id,
+        "selection_sets": selection_sets.list_selection_sets(run_dir),
+    }
+    _print_payload(args.format, payload, _render_selection_sets_list_text)
+    return EXIT_SUCCESS
+
+
+def _render_selection_sets_list_text(payload: dict) -> str:
+    lines = [f"run_id: {payload['run_id']}", "selection_sets:"]
+    if not payload["selection_sets"]:
+        lines.append("  none")
+        return "\n".join(lines)
+    for selection_set in payload["selection_sets"]:
+        lines.append(
+            f"  [{selection_set.get('status', 'unknown'):<9}] "
+            f"{selection_set.get('selection_set_id')} "
+            f"scenario={selection_set.get('preview_scenario_id')}"
+        )
+    return "\n".join(lines)
+
+
+def cmd_selection_sets_show(args: argparse.Namespace) -> int:
+    try:
+        run_dir = runs.resolve_run_dir(args.run_id, out_root=args.out)
+    except RunNotFoundError as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+    selection_set = selection_sets.load_selection_set(run_dir, args.selection_set_id)
+    if selection_set is None:
+        print(f"usage error: selection_set_id does not exist: {args.selection_set_id}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+    _print_payload(args.format, selection_set, _render_selection_set_text)
+    return EXIT_SUCCESS
+
+
+def _load_selection_set_request(path: Path, run_id: str) -> dict:
+    request = json.loads(Path(path).read_text())
+    if not isinstance(request, dict):
+        raise ValueError("selection-set request file must contain a JSON object")
+    schema_version = request.get("schema_version")
+    if schema_version is not None and schema_version != "0.1":
+        raise ValueError(f"unsupported selection-set request schema_version: {schema_version}")
+    request_run_id = request.get("run_id")
+    if request_run_id is not None and request_run_id != run_id:
+        raise ValueError(f"selection-set request run_id does not match target run_id: {request_run_id}")
+    return request
+
+
+def cmd_selection_sets_preview(args: argparse.Namespace) -> int:
+    try:
+        run_dir = runs.resolve_run_dir(args.run_id, out_root=args.out)
+        request = _load_selection_set_request(args.request_file, args.run_id)
+        preview = selection_sets.build_selection_set_preview(
+            args.run_id,
+            run_dir,
+            request,
+            command=f"reserve selection-sets preview {args.run_id} --request-file {args.request_file}",
+            dry_run=args.dry_run,
+        )
+    except (RunNotFoundError, OSError, json.JSONDecodeError, ValueError, selection_sets.SelectionSetError) as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    if not args.dry_run:
+        _append_outputs_preserving_exit(run_dir, [preview["selection_set_artifact"]])
+    _log_run(args.run_id, args.out, args.dry_run, [preview["selection_set_artifact"]])
+    _print_payload(args.format, preview, _render_selection_set_text)
+    return EXIT_SUCCESS
+
+
+def cmd_selection_sets_commit(args: argparse.Namespace) -> int:
+    try:
+        run_dir = runs.resolve_run_dir(args.run_id, out_root=args.out)
+    except RunNotFoundError as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    try:
+        decision_candidate = workbench_io.read_json(args.decision_file)
+        if decision_candidate.get("decision_type") != "selection_set_approval":
+            raise workbench_decisions.DecisionValidationError(
+                "selection-sets commit requires a selection_set_approval decision file"
+            )
+        if str(decision_candidate.get("selection_set_id") or "") != str(args.selection_set_id):
+            raise workbench_decisions.DecisionValidationError(
+                "decision selection_set_id does not match --selection-set-id"
+            )
+        original_selection_set = selection_sets.load_selection_set(run_dir, args.selection_set_id)
+        if original_selection_set is None:
+            raise selection_sets.SelectionSetError(f"selection_set_id does not exist: {args.selection_set_id}")
+        committed = selection_sets.commit_selection_set(
+            args.run_id,
+            run_dir,
+            args.selection_set_id,
+            {
+                "global_rationale": original_selection_set.get("global_rationale"),
+                "created_by": decision_candidate.get("user") or original_selection_set.get("created_by") or {},
+            },
+            # The decision validator intentionally requires the selection-set
+            # artifact to be committed. For CLI dry-runs, write that temporary
+            # state, validate the decision with dry_run=True, then restore the
+            # original preview before returning.
+            dry_run=False,
+        )
+        decision = workbench_decisions.commit_decision_payload(
+            args.run_id,
+            run_dir,
+            decision_candidate,
+            dry_run=args.dry_run,
+        )
+        if args.dry_run:
+            path = selection_sets.selection_set_path(run_dir, args.selection_set_id)
+            workbench_io.write_json(path, original_selection_set)
+    except (
+        OSError,
+        json.JSONDecodeError,
+        selection_sets.SelectionSetError,
+        workbench_decisions.DecisionValidationError,
+        FileExistsError,
+    ) as exc:
+        if "original_selection_set" in locals() and original_selection_set is not None:
+            path = selection_sets.selection_set_path(run_dir, args.selection_set_id)
+            current = selection_sets.load_selection_set(run_dir, args.selection_set_id)
+            if current and current.get("status") == "committed":
+                workbench_io.write_json(path, original_selection_set)
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    filenames = [
+        committed["selection_set_artifact"],
+        f"decisions/{decision['decision_id']}.json",
+        "validation_tasks.json",
+    ]
+    if not args.dry_run:
+        workbench_tasks.write_validation_tasks(args.run_id, run_dir)
+        _append_outputs_preserving_exit(run_dir, filenames)
+    _log_run(args.run_id, args.out, args.dry_run, filenames)
+    payload = {
+        "schema_version": "0.1",
+        "run_id": args.run_id,
+        "selection_set": committed,
+        "decision": decision,
+        "status": workbench_state.derive_status(args.run_id, run_dir),
+    }
+    _print_payload(args.format, payload, _render_selection_set_commit_text)
+    return EXIT_SUCCESS
+
+
+def _render_selection_set_text(payload: dict) -> str:
+    return "\n".join(
+        [
+            f"selection_set_id: {payload.get('selection_set_id')}",
+            f"run_id: {payload.get('run_id')}",
+            f"status: {payload.get('status')}",
+            f"preview_scenario_id: {payload.get('preview_scenario_id')}",
+            f"factor_selections: {len(payload.get('factor_selections', []))}",
+            f"exclusions: {len(payload.get('exclusions', []))}",
+        ]
+    )
+
+
+def _render_selection_set_commit_text(payload: dict) -> str:
+    selection_set = payload["selection_set"]
+    decision = payload["decision"]
+    return "\n".join(
+        [
+            f"selection_set_id: {selection_set['selection_set_id']}",
+            f"selection_set_status: {selection_set['status']}",
+            f"decision_id: {decision['decision_id']}",
+            f"decision_type: {decision['decision_type']}",
+            f"run_status: {payload['status']['status']}",
+        ]
+    )
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    try:
+        import uvicorn
+        from harness.workbench.api import create_app
+    except ImportError as exc:
+        print(f"usage error: dashboard dependencies are not installed: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    app = create_app(args.out)
+    print(f"dashboard: http://{args.host}:{args.port}/workbench-v2/", file=sys.stderr)
+    print(f"runs_root: {args.out}", file=sys.stderr)
+    uvicorn.run(app, host=args.host, port=args.port)
+    return EXIT_SUCCESS
+
+
+def cmd_decide(args: argparse.Namespace) -> int:
+    try:
+        run_dir = runs.resolve_run_dir(args.run_id, out_root=args.out)
+    except RunNotFoundError as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    try:
+        payload = workbench_decisions.commit_decision(
+            args.run_id, run_dir, args.decision_file, dry_run=args.dry_run
+        )
+    except (
+        workbench_decisions.DecisionValidationError,
+        FileExistsError,
+        OSError,
+        json.JSONDecodeError,
+    ) as exc:
+        print(f"usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE_ERROR
+
+    filenames = [f"decisions/{payload['decision_id']}.json", "validation_tasks.json"]
+    if payload.get("review_snapshot_id"):
+        filenames.append(
+            workbench_review_snapshots.snapshot_artifact(payload["review_snapshot_id"])
+        )
+    if not args.dry_run:
+        workbench_tasks.write_validation_tasks(args.run_id, run_dir)
+        _append_outputs_preserving_exit(run_dir, filenames)
+
+    _log_run(args.run_id, args.out, args.dry_run, filenames)
+    _print_payload(args.format, payload, _render_decision_text)
+    return EXIT_SUCCESS
+
+
+def _render_decision_text(payload: dict) -> str:
+    return "\n".join(
+        [
+            f"decision_id: {payload['decision_id']}",
+            f"run_id: {payload['run_id']}",
+            f"task_id: {payload.get('task_id')}",
+            f"decision_type: {payload['decision_type']}",
+            f"status: {payload['status']}",
+        ]
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

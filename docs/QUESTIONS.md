@@ -8,7 +8,9 @@ are now codified as normative text in `docs/cli-spec.md` v0.1.1 (see its
 changelog); Q1's shared-folder consequence (`diagnostics` needing `--out`
 to find a `fit` run written under a custom root) is now codified in v0.1.3.
 Q3's inference-only default was revisited in v0.1.13 — see the note under
-Q3 below and that version's changelog entry.**
+Q3 below and that version's changelog entry. Q1's "overwriting `exit_code`
+with the latest command's code" clause was revisited in v0.1.14 — see the
+note under Q1 below and that version's changelog entry.**
 
 ## Q1. Do `diagnostics` and `sensitivity` write into the *same* run folder as
 the `fit` they operate on, or mint a new run_id each time?
@@ -27,6 +29,19 @@ existing `manifest.json` in place — appending to `outputs` and overwriting
 `exit_code` with the latest command's code. `validate` run standalone (not
 via `fit`'s internal check) mints its own separate run_id/folder, since it
 has no method to embed and no fit to attach to.
+
+**Revisited, v0.1.14 (2026-07-06):** "overwriting `exit_code` with the
+latest command's code" turned out to be correct only for commands that
+perform a genuine new pass/warn assessment (`fit`, `diagnostics`).
+`sensitivity` (and, before it, `report`) always exits 0/carries no verdict
+of its own, so applying this clause literally let either one silently
+erase a real `diagnostics` warning from the shared manifest once it ran
+afterwards — found by independent review. Amended: a command with no
+verdict of its own reads the manifest's current `exit_code` and passes it
+straight through, rather than overwriting it with its own hardcoded code.
+`report` already did this (undocumented); `sensitivity` is now aligned to
+match. See `docs/cli-spec.md`'s v0.1.14 changelog entry and its
+`sensitivity` section.
 
 ## Q2. Does `fit`'s internal hard-rule validation persist anything when it
 fails?

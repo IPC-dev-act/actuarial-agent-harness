@@ -16,18 +16,26 @@ actuarial-agent-harness/
 │   │   ├── data-validation/SKILL.md
 │   │   ├── mack-diagnostics/SKILL.md
 │   │   ├── sensitivity-analysis/SKILL.md
-│   │   └── reserving-report/SKILL.md
+│   │   ├── reserving-report/SKILL.md
+│   │   ├── reserving-triangle-triage/SKILL.md
+│   │   ├── reserving-factor-review/SKILL.md
+│   │   ├── reserving-scenario-compare/SKILL.md
+│   │   └── reserving-selection-challenge/SKILL.md
 │   └── commands/
 │       ├── review.md             # /review <triangle.csv>
 │       ├── diagnose.md           # /diagnose <run-id>
 │       ├── challenge.md          # /challenge <run-id>
-│       └── report.md             # /report <run-id>
+│       ├── report.md             # /report <run-id>
+│       ├── triangle-triage.md    # /triangle-triage <run-id>
+│       ├── factor-review.md      # /factor-review <run-id>
+│       └── scenario-explain.md   # /scenario-explain <run-id>
 │
 ├── harness/                      # the product: everything model-agnostic
 │   ├── cli.py                    # `reserve` — parsing, exit codes, dispatch
 │   ├── manifest.py               # run manifests: hashes, versions, timestamps
 │   ├── validation.py             # triangle structure checks (engine-agnostic)
 │   ├── runs.py                   # run folder lifecycle
+│   ├── workbench/                # human-validation task/decision artifacts
 │   └── render/
 │       ├── report_html.py        # deterministic renderer (Phase 5, agent-built)
 │       └── templates/
@@ -55,7 +63,11 @@ actuarial-agent-harness/
 │
 ├── docs/
 │   ├── cli-spec.md               # frozen contract (this phase)
+│   ├── workbench-dashboard.md    # local dashboard MVP startup/workflow
 │   └── red-team.md               # adversarial prompts + refusals (Phase 6)
+│
+├── dashboard/
+│   └── static/                   # local workbench HTML/CSS/JS
 │
 └── tests/
     ├── test_validation.py
@@ -106,8 +118,8 @@ Notes:
 - Verdicts (`pass|warn|fail`) and thresholds live in the adapter output, not in
   agent judgment. `narrative_key` maps to fixed language in the
   `mack-diagnostics` skill — the agent selects narration, never invents it.
-- The reference `chainladder_adapter` implements `mack` at v1; `bf`, `capecod`,
-  `bootstrap` are declared roadmap in `capabilities()`.
+- The reference `chainladder_adapter` implements `chain_ladder` and `mack`;
+  `bf`, `capecod`, `bootstrap` are declared roadmap in `capabilities()`.
 - `EngineAdapter` has no `sensitivity()` method, deliberately. A sensitivity
   grid is nothing but repeated calls to `fit()` with different parameters —
   `harness/sensitivity.py` builds the perturbation grid and re-invokes
@@ -152,3 +164,120 @@ actually used, and how it was determined — `source` is `"declared"` if
 either way, so a manifest alone (without re-reading `validation.json`) always
 answers "was this basis a stated assumption or a guess?" (`docs/cli-spec.md`'s
 `validate` section).
+
+`exit_code` (revisited v0.1.14): amended in place by every command that
+shares an existing run folder (`diagnostics`, `sensitivity`, `report` —
+`docs/QUESTIONS.md` Q1), but not all of them overwrite it. `fit` and
+`diagnostics` perform a genuine new pass/warn assessment, so their own exit
+code replaces what was there. `sensitivity` and `report` don't assess
+anything — they carry the manifest's current `exit_code` forward unchanged
+instead of overwriting it with their own (always-0) code, so a `diagnostics`
+warning stays visible in `reserve runs list` no matter how many of those
+non-assessing commands run against the folder afterwards.
+
+## Workbench artifacts
+
+The interactive workbench adds a human-validation layer without changing
+reserving calculations. The AI/CLI still
+runs the controlled workflow, the engine still computes numbers, and the
+workbench layer only reads/writes structured run artifacts:
+
+- `validation_tasks.json` — a deterministic task queue derived from
+  `validation.json`, `diagnostics.json`, `sensitivity.json`, and immutable
+  decisions.
+- `scenario_index.json` — a model-agnostic preview index of the base run and
+  deterministic scenario candidates already produced by existing CLI
+  artifacts, currently `fit.json` and optional `sensitivity.json`.
+- `comparisons/<comparison_id>.json` — a generated comparison of one
+  scenario candidate against the base run, with metric deltas and hashes of
+  the artifacts used.
+- `factor_previews/<scenario_id>.json` — exploratory single-factor BCL
+  preview artifacts, retained for compatibility with earlier dashboard
+  workflow tests.
+- `selection_sets/<selection_set_id>.json` — governed deterministic chain
+  ladder preview/committed selection-set artifacts containing multiple
+  candidate-basis factor choices, simple exclusions, rationale, comparison,
+  command trail, and input hashes.
+- `decisions/<decision_id>.json` — one immutable human judgment record per
+  committed decision. A later change creates a new decision and references
+  `supersedes_decision_id`; no decision file is edited in place.
+- `review_handoff.json` — the structured AI-to-actuary pause/resume state.
+- `review_snapshots/<review_snapshot_id>.json` — the immutable reporting
+  basis approved by a `report_approval` decision.
+
+Current workbench decision types are `warning_ack`, `scenario_selection`,
+`method_review_ack`, `factor_selection`, `selection_set_approval`, and
+`report_approval`.
+
+Scenario previews are exploratory. A future dashboard or AI workflow can
+refresh `scenario_index.json` and write comparison artifacts, but only a
+committed `scenario_selection` decision can govern which scenario should feed
+later review-pack behavior. Scenario-selection decisions must reference a
+valid indexed scenario and are rejected if the indexed source-artifact hashes
+are stale.
+
+Selection-set previews are exploratory until committed. A committed
+selection set still is not human approval by itself; `selection_set_approval`
+is the immutable decision artifact that records the actuary's approval of
+that selection set for downstream disclosure. Report approval remains a
+separate `report_approval` decision and is bound to the active selection,
+decisions, source hashes, and renderer through a review snapshot. The lifecycle is available through both
+the dashboard API and the CLI (`reserve selection-sets list/show/preview/commit`);
+the CLI commit path uses the same decision validator as `reserve decide`.
+
+Final report generation can be hard-gated with
+`reserve report <run-id> --require-approval`. That path refuses to render
+when prerequisite workbench tasks remain pending, when a committed selection
+set has never been approved, when multiple active selection approvals exist,
+or when no current `report_approval` decision exists. It rejects stale review
+snapshots after any material reporting-basis change. Draft rendering without
+the flag remains available, but the report
+records `draft/incomplete` governance when approval is missing.
+
+`harness/workbench/` remains model-agnostic: it imports no reserving engine
+adapter, performs no actuarial calculations, and obtains every number from
+existing `runs/<run-id>/` JSON artifacts.
+
+## Local dashboard
+
+The FastAPI/static dashboard is a local MVP. The API lives in
+`harness/workbench/api.py` so it can call the same workbench functions as the
+CLI. Packaged v2 static files live under `harness/workbench/static_v2/`;
+`dashboard-v2/static/` preserves convenient source-tree links.
+
+The dashboard is a human-validation surface over existing artifacts:
+
+- status and artifact availability come from `harness.workbench.state`;
+- task refresh uses `harness.workbench.tasks`;
+- scenario lists and comparisons use `harness.workbench.scenarios`;
+- deterministic chain ladder summary/factors/projection use
+  `harness.workbench.chain_ladder`;
+- selection-set previews and commits use `harness.selection_sets`;
+- decision writes use `harness.workbench.decisions`;
+- JSON artifact reads are restricted to safe run-folder paths.
+
+The dashboard supports governed manual factor overrides, factor-point and
+origin/valuation exclusions, and constant tails. It has no production
+authentication, no chat panel, no governed log-linear smoothing, and no
+frontend actuarial calculations.
+
+## Claude operating layer
+
+The `.claude/commands/` and `.claude/skills/` files are the AI operating
+layer around the dashboard. Claude runs controlled CLI commands, reads
+artifacts, prepares scenario and review context, refreshes validation tasks,
+and stops where human judgment is required. The dashboard remains the human-validation layer:
+factor choices, exclusions, scenario selections,
+warning acknowledgements, and report approval are governed by structured
+decision artifacts, not chat text.
+
+Skill and command guardrails:
+
+- every number cited by Claude must come from a run artifact;
+- no mental arithmetic on model outputs;
+- no hidden factor selection;
+- no decision writes as a substitute for dashboard human validation;
+- no report approval without an immutable human decision artifact;
+- no final report presentation while required tasks remain pending;
+- preview artifacts are exploratory;
+- `decisions/*.json` is the durable source of committed judgment.

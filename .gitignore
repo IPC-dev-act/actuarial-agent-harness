@@ -44,3 +44,6 @@ htmlcov/
 # Secrets — belt and braces; nothing in this repo should ever need one
 .env
 *.pem
+
+# Extraction output for bootstrapping sibling repos (e.g. model-replication-harness)
+export/

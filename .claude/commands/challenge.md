@@ -1,34 +1,53 @@
 ---
-description: Peer-review an existing run for weaknesses, using only computed outputs
+description: Second-review challenge of a run's governance and computed artifacts
 argument-hint: <run-id>
 ---
 
-Peer-review run `$1` adversarially — the job is to find weaknesses, not
-confirm the fit looks fine. Base every observation on a file already under
-`runs/$1/`; if a file you'd need doesn't exist yet, say which command
-would produce it rather than reasoning about output you don't have. Never
-speculate about the underlying data or real-world portfolio beyond what
-those files show.
+Peer-review run `$1` adversarially using only artifacts already under
+`runs/$1/`. Apply the `reserving-selection-challenge`,
+`reserving-scenario-compare`, `sensitivity-analysis`, and `reserving-report`
+skills where relevant. If an artifact needed for a conclusion does not exist,
+say which command or dashboard workflow would create it; do not infer it.
 
-Look specifically for:
+Inspect, when present:
 
-- **Unresolved flags** — any `diagnostics.json: tests[].verdict == "warn"`
-  whose `prescribed_actions` haven't actually been run (check
-  `manifest.json: outputs` for whether `sensitivity.json` exists yet).
-- **Sensitivity range width** — if `sensitivity.json` exists, how large is
-  `range.ibnr_max - range.ibnr_min` relative to `range.base_ibnr`? State the
-  numbers plainly; don't editorialize about what counts as "too wide"
-  beyond what the `sensitivity-analysis` skill already frames.
-- **Null totals** — any `null` in `fit.json`/`sensitivity.json` totals.
-  Per `sensitivity-analysis`: null means undefined, never zero — name which
-  parameter and which origin/transition made it inestimable, and frame it
-  as a data-thinness finding, not a fit failure.
-- **Data-thinness generally** — origins with few observed periods
-  (`fit.json: by_origin[]` cross-referenced against `validation.json:
-  dimensions`) drive the largest standard errors and the least reliable
-  perturbation results; call these out by origin.
+- `manifest.json`
+- `validation.json`
+- `fit.json`
+- `triangle.json`
+- `diagnostics.json`
+- `sensitivity.json`
+- `validation_tasks.json`
+- `decisions/*.json`
+- `selection_sets/*.json`
+- `scenario_index.json`
+- `comparisons/*.json`
+- `report.html`
 
-For each weakness found, propose the specific additional `reserve`
-invocation that would probe it further — not "investigate more." If
-nothing in the run's own files supports a concern, don't invent one to
-seem thorough.
+Challenge specifically:
+
+- unresolved validation or diagnostics warning tasks;
+- missing, weak, or generic decision rationale;
+- one-sided factor choices in committed selection sets;
+- exclusions without sufficient artifact-backed rationale;
+- scenario selections that do not match a valid committed decision;
+- selected scenario shown in dashboard artifacts but not supported by an
+  active decision;
+- report generated before `report_approval`;
+- report approval while prerequisite warning, scenario, or BCL tasks remain
+  pending;
+- null totals or data-thinness findings that were omitted from the narrative.
+
+Output using this operational shape:
+
+- What I read
+- What artifacts are missing
+- Findings
+- What requires dashboard validation
+- What I will not do without human decision
+- Next step
+
+Never supersede, reject, approve, or write a decision. Produce a concise
+challenge note and direct the actuary back to the dashboard for any further
+validation. Every quantitative statement must cite an artifact under
+`runs/$1/`.
