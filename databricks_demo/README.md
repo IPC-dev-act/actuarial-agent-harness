@@ -21,25 +21,35 @@ flowchart TD
 
 ## Install with an agent
 
-Use the `databricks-integration` checkout with Claude Code, the Databricks
-CLI (1.3 or later), uv and Python 3.11 or later. Sign in from the checkout
-using the workspace URL and start Claude Code there:
+If you are setting this up for the user, clone the `databricks-integration`
+branch if needed, then read and follow the
+[installation workflow](../skills/install-databricks-reserving/SKILL.md)
+from the checkout. Start by asking the user to open and sign in to their
+Databricks workspace in their browser, then paste its workspace URL.
 
-```bash
-databricks auth login --host https://YOUR-WORKSPACE --profile ipc-demo
-claude
-```
+The guided setup uses the Databricks CLI (1.3 or later), uv and Python 3.11
+or later. The workspace must allow creating a schema, running jobs and
+using a SQL warehouse. The installer uses its bundled MCP tools. The
+official Genie One plugin is optional for analytics.
 
-Ask **“Install Actuary in Databricks using my ipc-demo profile.”** Claude Code
-loads the [project skill](../.claude/skills/install-databricks-reserving/SKILL.md).
-When there is more than one suitable Unity Catalog catalog or SQL warehouse,
-specify the one you want Claude to use. The workspace access must allow
-creating a schema in that catalog, running jobs, and using the warehouse.
+Expect **55 RAA observations** at the import checkpoint. After launching
+Mack in Databricks, expect **52,135.23 IBNR**, a **26,909.01 Mack standard
+error**, and a draft report linked to the selected Delta version.
 
-The agent uses the signed-in CLI to deploy and the bundled MCP tools to run
-the demo. Expect **55 RAA observations**, **52,135.23 IBNR**, a **26,909.01 Mack
-standard error**, and a draft report linked to the selected Delta version.
-The official Genie One plugin is optional for analytics.
+### Try a clean deployment in the same workspace
+
+Ask the agent to use a fresh checkout and an unused schema such as
+`ipc_reserving_demo_retry`. The schema name is part of the bundle’s workspace
+path. The retry creates a fresh deployment with its own schema, volume and
+jobs. To test browser authentication again, also use a new CLI profile.
+Use a fresh OS user or machine to test prerequisite installation from scratch.
+
+Workspace Trash covers workspace objects such as notebooks and files. The
+Lakeflow jobs and Unity Catalog schema, volume, and tables can still exist.
+If you moved the bundle’s workspace state to Trash, restore it before
+redeploying into the original schema, or use a new schema for the retry.
+
+### Other ways to install
 
 For Codex, install the [portable skill](../skills/install-databricks-reserving/SKILL.md)
 from the same checkout:

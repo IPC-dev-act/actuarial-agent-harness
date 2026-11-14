@@ -11,39 +11,51 @@ If the skill was installed on its own, check out its release tag or commit
 from [IPC-dev-act/actuarial-agent-harness](https://github.com/IPC-dev-act/actuarial-agent-harness).
 For branch-based testing, use the checkout from which the skill was installed.
 
-Confirm the intended Databricks CLI profile and writable Unity Catalog
-catalog from the conversation or workspace. When the user omits them,
-inspect `databricks auth profiles` and `databricks catalogs list --profile PROFILE`.
-Use the workspace's writable catalog if clear, and ask for the catalog if
-several candidates remain. Run `databricks current-user me --profile PROFILE`
-to check connectivity. When
-sign-in is required, direct the user to their local browser sign-in with
-`databricks auth login --host WORKSPACE_URL --profile PROFILE`. Use the
-user's CLI session. Setup needs a recent Databricks CLI, uv, Python 3.11+
-and the ability to create a schema and run jobs. Use the dedicated
-`ipc_reserving_demo` schema unless the user specifies another demo schema.
-Select the warehouse automatically when only one is available, or use the
-user's choice with `--warehouse-id`.
+## Connect to Databricks
+
+1. If the user has provided neither a workspace URL nor a CLI profile,
+   ask them to open their Databricks workspace, sign in, and paste the
+   workspace URL from the address bar. Use the workspace origin, such as
+   `https://dbc-example.cloud.databricks.com`. If they paste an account
+   sign-in page, ask for the workspace URL once it opens.
+2. Check for the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install)
+   (1.3 or later), [uv](https://docs.astral.sh/uv/getting-started/installation/),
+   and Python 3.11 or later. Help the user install any missing prerequisite
+   using its official instructions.
+3. Use the named CLI profile, or `ipc-demo` by default. Check
+   `databricks auth profiles` for a profile matching the intended workspace.
+   When browser sign-in is needed, run
+   `databricks auth login --host WORKSPACE_URL --profile PROFILE` and tell
+   the user to finish in their browser. Verify the connection with
+   `databricks current-user me --profile PROFILE`.
+4. Run `databricks catalogs list --profile PROFILE` if the catalog is
+   unspecified. Use the workspace's writable catalog if clear, or ask
+   when several are suitable. The user needs permission to create a
+   schema and run jobs. Select the SQL warehouse automatically when only
+   one is available, or use the user's choice with `--warehouse-id`.
+
+Use `ipc_reserving_demo` for a first install. For a clean retry in the same
+workspace, use an unused schema name passed with `--schema` on every
+installer command. This gives the bundle a fresh workspace path and
+deployment state. For a fresh sign-in test, also use a new CLI profile.
 
 Run the commands below with the actual profile and catalog. Keep the same
 profile, catalog and schema across commands.
 
 ```bash
 uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py deploy --profile PROFILE --catalog CATALOG
-uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py rehearse --profile PROFILE --catalog CATALOG
-uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py connect --profile PROFILE --catalog CATALOG
+uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py import --profile PROFILE --catalog CATALOG
 ```
 
-For an install request, deploy, then rehearse. The rehearsal uses
-the project's MCP tools to upload the public sample, verify its 55 rows,
-run Mack on the imported Delta version, verify the saved reserve and
-standard error, and download the draft report. If interrupted after
-submission, repeat the rehearsal with its printed `--request-id` to reuse
-the original Lakeflow submissions. For a deploy-only request, stop after
-deployment and give the user the job links.
+Use the guided import for a request to set up, install, or walk through the
+demo. For a deploy-only request, stop after deployment and give the job links.
+For an explicit end-to-end run, use `rehearse` in place of `import` to
+verify the 55 rows, run Mack on the imported Delta version, and retrieve
+the draft. After an interruption, repeat the last action with its printed
+`--request-id` to reuse the original Lakeflow submissions.
 
-If the user wants a guided demo or to inspect the triangle before
-calculating reserves, deploy and run the installer with action `import`.
+## Guide the user through the imported data
+
 Lead with a clickable **Open RAA triangle in Databricks** link from
 `input_table_url`. Tell the user to select **Sample Data** and use the
 available SQL warehouse if prompted. The table shows the current rows.
