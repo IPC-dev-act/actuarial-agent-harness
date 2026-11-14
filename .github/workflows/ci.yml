@@ -57,12 +57,13 @@ jobs:
           python -m pip install dist/*.whl "pytest==9.1.1"
           cd "$RUNNER_TEMP"
           python -m pytest -q --import-mode=importlib "$GITHUB_WORKSPACE/tests/test_databricks_demo.py"
+      - name: Assemble Databricks demo
+        run: |
+          mkdir -p demo-package
+          cp dist/*.whl databricks_demo/Import_Triangle.py databricks_demo/Reserving_Demo.py databricks_demo/README.md examples/raa.csv scripts/reserving_mcp.py demo-package/
       - name: Package Databricks demo
         uses: actions/upload-artifact@v4
         with:
           name: databricks-reserving-demo
-          path: |
-            dist/*.whl
-            databricks_demo/Reserving_Demo.py
-            databricks_demo/README.md
+          path: demo-package/
           if-no-files-found: error

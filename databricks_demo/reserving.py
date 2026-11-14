@@ -171,14 +171,18 @@ def seed_triangles(spark, table):
     """, args={"rows": json.dumps(rows, allow_nan=False)}).collect()
 
 
-def read_triangle(spark, table, dataset):
-    version = int(spark.sql(f"DESCRIBE HISTORY {table} LIMIT 1").first()["version"])
+def read_triangle(spark, table, dataset, source_version=None):
+    if source_version is None:
+        source_version = spark.sql(f"DESCRIBE HISTORY {table} LIMIT 1").first()["version"]
+    version = int(source_version)
+    if version < 0:
+        raise ValueError("Use a non-negative Delta input version.")
     rows = spark.sql(f"""
         SELECT origin, development, value FROM {table} VERSION AS OF {version}
         WHERE dataset = :dataset ORDER BY origin, development
     """, args={"dataset": dataset}).collect()
     if not rows:
-        raise ValueError(f"No rows for the {dataset!r} triangle in {table}. Run the seed cell first.")
+        raise ValueError(f"No rows for the {dataset!r} triangle in {table} at version {version}. Run Import_Triangle first.")
     handle = StringIO()
     writer = csv.writer(handle, lineterminator="\n")
     writer.writerow(("origin", "development", "value"))

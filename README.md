@@ -47,7 +47,26 @@ A company adopts this by writing a ~100-line adapter for their engine
 (see [ARCHITECTURE.md](ARCHITECTURE.md#engine-adapter-contract)) and inherits the
 entire governance layer.
 
-## Three ways to use this
+## Actuary in Databricks
+
+Clone the `databricks-integration` branch. With the Databricks CLI and uv
+installed, sign in to your workspace and start Claude Code from the checkout:
+
+```bash
+git clone --branch databricks-integration https://github.com/IPC-dev-act/actuarial-agent-harness.git
+cd actuarial-agent-harness
+databricks auth login --host https://YOUR-WORKSPACE --profile ipc-demo
+claude
+```
+
+Ask **“Install Actuary in Databricks using my ipc-demo profile.”** Claude Code
+loads the [project skill](.claude/skills/install-databricks-reserving/SKILL.md).
+The installer deploys two Lakeflow jobs and uses the bundled MCP server
+to import the public RAA triangle, run Mack, and fetch the draft report.
+See the [Databricks demo guide](databricks_demo/README.md) for prerequisites,
+the expected result and manual runs.
+
+## Three ways to use this locally
 
 Ordered by increasing agent autonomy — the same progression a real actuarial
 department would follow.

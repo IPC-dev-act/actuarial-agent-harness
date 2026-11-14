@@ -1,0 +1,84 @@
+bundle:
+  name: ipc-reserving-demo
+  engine: direct
+  databricks_cli_version: ">= 1.3.0"
+
+workspace:
+  root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}/${var.catalog}/${var.schema}
+
+variables:
+  catalog:
+    description: Writable Unity Catalog catalog
+  schema:
+    description: Name of the dedicated demo schema
+  wheel:
+    description: Filename of the built harness wheel
+
+sync:
+  exclude:
+    - databricks.yml
+
+resources:
+  schemas:
+    demo_schema:
+      catalog_name: ${var.catalog}
+      name: ${var.schema}
+      comment: Public RAA reserving demo
+      lifecycle:
+        prevent_destroy: true
+  volumes:
+    demo_files:
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.demo_schema.name}
+      name: reserving_demo_files
+      volume_type: MANAGED
+  jobs:
+    import_raa:
+      name: ${var.schema} - Import RAA
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: volume
+          default: reserving_demo_files
+        - name: file_name
+          default: raa.csv
+      tasks:
+        - task_key: import_triangle
+          notebook_task:
+            notebook_path: ./databricks_demo/Import_Triangle.py
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
+    run_reserving:
+      name: ${var.schema} - Run reserving
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: dataset
+          default: raa
+        - name: method
+          default: mack
+        - name: source_version
+          default: ""
+      tasks:
+        - task_key: reserving
+          environment_key: harness
+          notebook_task:
+            notebook_path: ./databricks_demo/Reserving_Demo.py
+            base_parameters:
+              job_run_id: "{{job.run_id}}"
+      environments:
+        - environment_key: harness
+          spec:
+            environment_version: "6"
+            dependencies:
+              - ${workspace.file_path}/dist/${var.wheel}
+
+targets:
+  demo:
+    default: true

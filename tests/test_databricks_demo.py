@@ -72,6 +72,11 @@ def test_demo_delta_queries_bind_values_and_read_the_captured_version():
     assert source == "origin,development,value\n1981,1981,5012.0\n"
     assert "VERSION AS OF 7" in calls[-1][0]
     assert calls[-1][1] == {"dataset": "raa"}
+    calls.clear()
+    pinned_version, pinned_source = read_triangle(spark, triangles, "raa", "4")
+    assert (pinned_version, pinned_source) == (4, source)
+    assert len(calls) == 1
+    assert "VERSION AS OF 4" in calls[0][0]
 
     row = run_reserving(RAA.with_name("triangle_gapped.csv").read_text(), "gapped", "mack", triangles, version)
     save_run(spark, history, row)
