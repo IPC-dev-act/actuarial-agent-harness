@@ -44,6 +44,11 @@ path. The retry creates a fresh deployment with its own schema, volume and
 jobs. To test browser authentication again, also use a new CLI profile.
 Use a fresh OS user or machine to test prerequisite installation from scratch.
 
+For a before-and-after demo, ask Claude to **show the empty demo schema
+before importing**. Open the Catalog Explorer link after deployment and
+show that the schema has no demo tables. Tell Claude to import the RAA
+triangle, then refresh the same page to see the triangle table appear.
+
 Workspace Trash covers workspace objects such as notebooks and files. The
 Lakeflow jobs and Unity Catalog schema, volume, and tables can still exist.
 If you moved the bundle’s workspace state to Trash, restore it before

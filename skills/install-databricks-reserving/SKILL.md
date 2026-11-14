@@ -54,6 +54,19 @@ verify the 55 rows, run Mack on the imported Delta version, and retrieve
 the draft. After an interruption, repeat the last action with its printed
 `--request-id` to reuse the original Lakeflow submissions.
 
+## Show the catalog before and after import
+
+If the user asks to clear the catalog for the demo or see the empty state,
+choose an unused schema in their writable catalog. Run `deploy` with
+`--schema SCHEMA`. Give the user the **Open demo schema in Databricks**
+link from `schema_url`. Ask them to open it and show **Tables** with no
+demo tables yet. The deployment may already list a volume. Pause for the
+user to confirm they have seen the schema.
+
+Then run `import` with the same profile, catalog, and schema. Ask the user
+to refresh the schema so they can see `ipc_reserving_demo_triangles` appear.
+Continue with the table link and imported Delta version below.
+
 ## Guide the user through the imported data
 
 Lead with a clickable **Open RAA triangle in Databricks** link from

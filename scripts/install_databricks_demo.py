@@ -55,6 +55,7 @@ def deployment(args, project):
     return {
         "workspace": url,
         "notebook_folder": f"{workspace['file_path']}/databricks_demo",
+        "schema_url": catalog_url,
         "volume": f"/Volumes/{args.catalog}/{args.schema}/{VOLUME}",
         "input_table": f"{args.catalog}.{args.schema}.ipc_reserving_demo_triangles",
         "input_table_url": f"{catalog_url}/ipc_reserving_demo_triangles",
