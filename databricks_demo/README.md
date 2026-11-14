@@ -72,9 +72,10 @@ warehouses, pass `--warehouse-id` for the one you want to use.
 ## Run in Databricks
 
 For a staged demo, tell Claude Code to deploy and **import the public RAA
-triangle only**. The installer action `import` returns the table name, a
-preview, the Delta version, and both job links. Open the import run output
-or the table in Catalog Explorer and show the observations.
+triangle only**. The installer action `import` returns a Catalog Explorer
+link, a preview, the Delta version, and both job links. Open the table link
+and select **Sample Data** to see the current rows. Open the import run
+output to see the preview for the exact Delta version that was imported.
 
 Open the **Run reserving** job and choose **Run now with different
 parameters**. Set `source_version` to the imported version and keep

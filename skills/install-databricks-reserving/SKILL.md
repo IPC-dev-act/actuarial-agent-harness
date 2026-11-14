@@ -42,12 +42,19 @@ submission, repeat the rehearsal with its printed `--request-id` to reuse
 the original Lakeflow submissions. For a deploy-only request, stop after
 deployment and give the user the job links.
 
-If the user wants to inspect the triangle before calculating reserves, deploy
-and run the installer with action `import`. Show the input table, first five
-rows, Delta version, import run link and reserving job link, then pause.
+If the user wants a guided demo or to inspect the triangle before
+calculating reserves, deploy and run the installer with action `import`.
+Lead with a clickable **Open RAA triangle in Databricks** link from
+`input_table_url`. Tell the user to select **Sample Data** and use the
+available SQL warehouse if prompted. The table shows the current rows.
+Give the import run link as well so the user can see the preview and Delta
+version from that import. Show the first five rows, the exact Delta
+version, and the reserving job link, then pause for the user to inspect.
 To run from the workspace, use **Run now with different parameters** on the
 reserving job, set `method=mack`, and set `source_version` to the printed
-version. The draft is displayed in the reserving notebook task's output.
+version. After the job completes, link to the run and tell the user to
+open the **reserving** notebook task to see the draft. Provide
+`run_history_url` to inspect the stored results in Catalog Explorer.
 
 If the user wants native Genie, run the installer with action `genie` after
 a successful Mack run. If Genie is unavailable, report the workspace error

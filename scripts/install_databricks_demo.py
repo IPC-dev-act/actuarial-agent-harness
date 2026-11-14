@@ -51,12 +51,15 @@ def deployment(args, project):
         url = json.loads(auth.stdout).get("details", {}).get("host")
     if not url:
         raise ValueError(f"No Databricks workspace host found for profile {args.profile!r}.")
+    catalog_url = f"{url.rstrip('/')}/explore/data/{args.catalog}/{args.schema}"
     return {
         "workspace": url,
         "notebook_folder": f"{workspace['file_path']}/databricks_demo",
         "volume": f"/Volumes/{args.catalog}/{args.schema}/{VOLUME}",
         "input_table": f"{args.catalog}.{args.schema}.ipc_reserving_demo_triangles",
+        "input_table_url": f"{catalog_url}/ipc_reserving_demo_triangles",
         "run_history": f"{args.catalog}.{args.schema}.ipc_reserving_demo_run_history",
+        "run_history_url": f"{catalog_url}/ipc_reserving_demo_run_history",
         "import_job": job_pointer(url, jobs["import_raa"]),
         "reserving_job": job_pointer(url, jobs["run_reserving"]),
     }
