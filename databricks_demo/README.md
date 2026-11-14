@@ -71,6 +71,29 @@ warehouses, pass `--warehouse-id` for the one you want to use.
 
 ## Run in Databricks
 
+For a staged demo, tell Claude Code to deploy and **import the public RAA
+triangle only**. The installer action `import` returns the table name, a
+preview, the Delta version, and both job links. Open the import run output
+or the table in Catalog Explorer and show the observations.
+
+Open the **Run reserving** job and choose **Run now with different
+parameters**. Set `source_version` to the imported version and keep
+`method=mack`. Open the completed run and select the **reserving** notebook
+task to see the draft report in Databricks. Keep the job run ID for both
+follow-up questions.
+
+Run the installer's `genie` action once after Mack completes and open the
+returned Genie link. Use `connect` to register the reserving MCP server
+with Claude Code, then open a session that loads it.
+
+- In **Genie**, ask which origin year and development period had a negative
+  incremental for that Mack job run, and by how much. Ask for the attempt ID.
+- In **Claude Code**, ask for the saved IBNR and Mack standard error for the
+  same job run ID. Ask which diagnostic put it into actuarial review and for
+  the Databricks run link.
+
+The steps below also support a manual upload and notebook run.
+
 1. Unzip the demo package. In **Workspace**, import `Import_Triangle.py` and
    `Reserving_Demo.py` and upload the `.post2` wheel. Set both notebooks to
    **Serverless**. In the **Reserving_Demo** Environment pane, add the wheel

@@ -42,8 +42,15 @@ submission, repeat the rehearsal with its printed `--request-id` to reuse
 the original Lakeflow submissions. For a deploy-only request, stop after
 deployment and give the user the job links.
 
+If the user wants to inspect the triangle before calculating reserves, deploy
+and run the installer with action `import`. Show the input table, first five
+rows, Delta version, import run link and reserving job link, then pause.
+To run from the workspace, use **Run now with different parameters** on the
+reserving job, set `method=mack`, and set `source_version` to the printed
+version. The draft is displayed in the reserving notebook task's output.
+
 If the user wants native Genie, run the installer with action `genie` after
-a successful rehearsal. If Genie is unavailable, report the workspace error
+a successful Mack run. If Genie is unavailable, report the workspace error
 and retain the verified job links and report. If the user wants direct MCP
 access in their agent, run the generated registration command for the
 user's client. If already registered, reuse the entry when its deployment

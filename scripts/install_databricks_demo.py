@@ -108,7 +108,7 @@ def connect(args, installed):
     }
 
 
-async def rehearse(args, installed):
+async def rehearse(args, installed, *, import_only=False):
     env = {name: os.environ[name] for name in ("DATABRICKS_CONFIG_FILE", "HTTPS_PROXY", "NO_PROXY") if name in os.environ}
     server = StdioServerParameters(command=sys.executable, args=server_args(args, installed), env=env)
     async with stdio_client(server) as (read, write):
@@ -138,6 +138,8 @@ async def rehearse(args, installed):
             imported["uploaded_csv"] = started["uploaded_csv"]
             if imported["observations"] != 55:
                 raise ValueError(f"Expected 55 RAA observations: {imported}")
+            if import_only:
+                return {"import": imported}
             started = await call("run_raa_reserving", {
                 "method": "mack", "request_id": request_id, "source_version": imported["source_version"],
             })
@@ -214,7 +216,7 @@ def configure_genie(args, installed):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["deploy", "connect", "rehearse", "genie"])
+    parser.add_argument("action", choices=["deploy", "connect", "import", "rehearse", "genie"])
     parser.add_argument("--profile", required=True)
     parser.add_argument("--catalog", required=True)
     parser.add_argument("--schema", default="ipc_reserving_demo")
@@ -238,10 +240,10 @@ def main():
         installed = deployment(args, project)
     if args.action == "connect":
         installed["mcp"] = connect(args, installed)
-    if args.action == "rehearse":
+    if args.action in {"import", "rehearse"}:
         args.request_id = args.request_id or uuid4()
-        print(f"Rehearsal request ID: {args.request_id}", file=sys.stderr, flush=True)
-        installed.update(asyncio.run(rehearse(args, installed)))
+        print(f"{args.action.capitalize()} request ID: {args.request_id}", file=sys.stderr, flush=True)
+        installed.update(asyncio.run(rehearse(args, installed, import_only=args.action == "import")))
     if args.action == "genie":
         installed["genie"] = configure_genie(args, installed)
     print(json.dumps(installed, indent=2))
