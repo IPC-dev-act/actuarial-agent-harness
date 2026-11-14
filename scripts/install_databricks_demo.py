@@ -40,10 +40,20 @@ def bundle(args, project, command, *options):
 def deployment(args, project):
     summary = json.loads(bundle(args, project, "summary", "--force-pull", "--output", "json").stdout)
     jobs = summary["resources"]["jobs"]
-    url = summary["workspace"]["host"]
+    workspace = summary["workspace"]
+    url = workspace.get("host")
+    if not url:
+        # Profile-based deployments can omit the resolved host from bundle summary JSON.
+        auth = subprocess.run(
+            ["databricks", "auth", "describe", "--profile", args.profile, "--output", "json"],
+            cwd=project.parent, check=True, text=True, capture_output=True,
+        )
+        url = json.loads(auth.stdout).get("details", {}).get("host")
+    if not url:
+        raise ValueError(f"No Databricks workspace host found for profile {args.profile!r}.")
     return {
         "workspace": url,
-        "notebook_folder": f"{summary['workspace']['file_path']}/databricks_demo",
+        "notebook_folder": f"{workspace['file_path']}/databricks_demo",
         "volume": f"/Volumes/{args.catalog}/{args.schema}/{VOLUME}",
         "input_table": f"{args.catalog}.{args.schema}.ipc_reserving_demo_triangles",
         "run_history": f"{args.catalog}.{args.schema}.ipc_reserving_demo_run_history",
