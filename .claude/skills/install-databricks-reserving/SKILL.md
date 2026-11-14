@@ -1,10 +1,11 @@
 ---
 name: install-databricks-reserving
-description: Guide the Actuary in Databricks demo from Databricks sign-in to inspecting the public RAA triangle and running Mack. Use when asked to install, deploy or rehearse the Databricks reserving demo.
+description: Guide the Actuary in Databricks demo from sign-in through a fresh schema, the public RAA import and a Mack draft report.
 ---
 
 # Install Actuary in Databricks
 
 Read [the installation workflow](../../../skills/install-databricks-reserving/SKILL.md)
-and follow it from the repository root. For a new walkthrough, start with
-the workspace URL and use the guided import path.
+and follow it from the repository root. With no arguments, start the guided
+demo. Open a fresh schema and pause at its empty **Tables** section before
+importing.

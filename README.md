@@ -49,13 +49,17 @@ entire governance layer.
 
 ## Actuary in Databricks
 
-Paste this into Claude Code:
+Open the [Databricks integration checkout](https://github.com/IPC-dev-act/actuarial-agent-harness/tree/databricks-integration)
+in Claude Code and run:
 
-> Set up the guided Actuary in Databricks demo from https://github.com/IPC-dev-act/actuarial-agent-harness/tree/databricks-integration and follow databricks_demo/README.md.
+```text
+/install-databricks-reserving
+```
 
 Claude follows the [project instructions](.claude/skills/install-databricks-reserving/SKILL.md)
-for sign-in, deployment, and import. It gives you a Databricks link to inspect
-the public RAA triangle and pauses so you can launch Mack from the workspace.
+for sign-in and deployment. It opens a fresh schema and pauses at the empty
+**Tables** section. After you continue, Claude imports the public RAA triangle
+and gives you the link and Delta version for running Mack in Databricks.
 See the [Databricks demo guide](databricks_demo/README.md) for prerequisites
 and a clean retry.
 

@@ -34,38 +34,39 @@ For branch-based testing, use the checkout from which the skill was installed.
    schema and run jobs. Select the SQL warehouse automatically when only
    one is available, or use the user's choice with `--warehouse-id`.
 
-Use `ipc_reserving_demo` for a first install. For a clean retry in the same
-workspace, use an unused schema name passed with `--schema` on every
-installer command. This gives the bundle a fresh workspace path and
-deployment state. For a fresh sign-in test, also use a new CLI profile.
+## Default guided demo
 
-Run the commands below with the actual profile and catalog. Keep the same
-profile, catalog and schema across commands.
+For each new walkthrough, list the schemas with
+`databricks schemas list CATALOG --profile PROFILE` and choose an unused
+demo schema. Use `ipc_reserving_demo` if available, or add a numeric suffix
+if it already exists. Use the same profile, catalog and schema throughout
+the walkthrough. A fresh sign-in test can also use a new CLI profile.
+
+First, deploy into that schema.
 
 ```bash
-uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py deploy --profile PROFILE --catalog CATALOG
-uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py import --profile PROFILE --catalog CATALOG
+uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py deploy --profile PROFILE --catalog CATALOG --schema SCHEMA
 ```
 
-Use the guided import for a request to set up, install, or walk through the
-demo. For a deploy-only request, stop after deployment and give the job links.
-For an explicit end-to-end run, use `rehearse` in place of `import` to
-verify the 55 rows, run Mack on the imported Delta version, and retrieve
-the draft. After an interruption, repeat the last action with its printed
-`--request-id` to reuse the original Lakeflow submissions.
+Give the user the **Open demo schema in Databricks** link from
+`schema_url`. Tell them to open **Tables** and confirm it has no tables.
+The deployment may already list a volume. Pause before importing and
+wait for the user to continue.
 
-## Show the catalog before and after import
+When they are ready, run the import in the same schema.
 
-If the user asks to clear the catalog for the demo or see the empty state,
-choose an unused schema in their writable catalog. Run `deploy` with
-`--schema SCHEMA`. Give the user the **Open demo schema in Databricks**
-link from `schema_url`. Ask them to open it and show **Tables** with no
-demo tables yet. The deployment may already list a volume. Pause for the
-user to confirm they have seen the schema.
+```bash
+uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py import --profile PROFILE --catalog CATALOG --schema SCHEMA
+```
 
-Then run `import` with the same profile, catalog, and schema. Ask the user
-to refresh the schema so they can see `ipc_reserving_demo_triangles` appear.
+Ask the user to refresh the schema so they can see `ipc_reserving_demo_triangles` appear.
 Continue with the table link and imported Delta version below.
+
+For a deploy-only request, stop after deployment and give the schema and job
+links. For an explicit uninterrupted end-to-end run, use `rehearse` in place
+of `import` to verify the 55 rows, run Mack on the imported Delta version,
+and retrieve the draft. After an interruption, repeat the last action with
+its printed `--request-id` to reuse the original Lakeflow submissions.
 
 ## Guide the user through the imported data
 
