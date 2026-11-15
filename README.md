@@ -49,12 +49,14 @@ entire governance layer.
 
 ## Actuary in Databricks
 
-Open the [Databricks integration checkout](https://github.com/IPC-dev-act/actuarial-agent-harness/tree/databricks-integration)
-in Claude Code and run:
+Paste this into a fresh Claude Code session.
 
 ```text
-/install-databricks-reserving
+Clone the databricks-integration branch of https://github.com/IPC-dev-act/actuarial-agent-harness and follow its /install-databricks-reserving skill.
 ```
+
+If you've already checked out the [Databricks integration branch](https://github.com/IPC-dev-act/actuarial-agent-harness/tree/databricks-integration),
+open that folder in Claude Code and run `/install-databricks-reserving`.
 
 Claude follows the [project instructions](.claude/skills/install-databricks-reserving/SKILL.md)
 for sign-in and deployment. It opens a fresh schema and pauses at the empty

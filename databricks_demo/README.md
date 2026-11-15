@@ -21,13 +21,22 @@ flowchart TD
 
 ## Install with an agent
 
-Open the branch checkout in Claude Code and enter `/install-databricks-reserving`.
+Use the [Claude Code prompt](../README.md#actuary-in-databricks) to have
+Claude clone the demo and start the walkthrough. To clone it yourself,
+run these commands in your terminal.
 
-If you are setting this up for the user, clone the `databricks-integration`
-branch if needed, then read and follow the
+```bash
+git clone --branch databricks-integration --single-branch https://github.com/IPC-dev-act/actuarial-agent-harness.git
+cd actuarial-agent-harness
+claude
+```
+
+Enter `/install-databricks-reserving` in Claude Code.
+
+If you are setting this up for the user, read and follow the
 [installation workflow](../skills/install-databricks-reserving/SKILL.md)
-from the checkout. Start by asking the user to open and sign in to their
-Databricks workspace in their browser, then paste its workspace URL.
+from the checkout. If you need the workspace URL, ask the user to open
+their Databricks workspace in their browser and paste its URL.
 
 The guided setup uses the Databricks CLI (1.3 or later), uv and Python 3.11
 or later. The workspace must allow creating a schema, running jobs and
