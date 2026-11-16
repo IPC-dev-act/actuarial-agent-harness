@@ -62,8 +62,9 @@ Claude follows the [project instructions](.claude/skills/install-databricks-rese
 for sign-in and deployment. Open the fresh schema from Claude's link and
 keep the empty **Tables** section on screen. Say **Run the import** and
 refresh that page when Claude says the import has finished. Open the
-new RAA table in Databricks. Claude gives you its Delta version for the
-Mack run.
+new RAA table and use its Delta version to run Mack in Databricks.
+Open the draft in the completed Databricks run and see the saved result
+in Catalog Explorer. Ask Genie and Claude via MCP about that same run.
 See the [Databricks demo guide](databricks_demo/README.md) for prerequisites
 and a clean retry.
 

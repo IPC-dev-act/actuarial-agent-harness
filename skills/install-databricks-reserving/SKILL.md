@@ -1,6 +1,6 @@
 ---
 name: install-databricks-reserving
-description: Deploy and rehearse the Actuary in a Box RAA reserving demo in a Databricks workspace. Use when asked to install the Databricks reserving demo, provision its notebooks and jobs, run Mack on the public sample, or connect its reserving MCP server.
+description: Guide the Actuary in a Box RAA reserving demo through a Databricks import, a Mack draft report in Databricks, and questions in Genie and Claude via MCP. Also use for deploy-only and automated rehearsals.
 ---
 
 # Install Databricks reserving
@@ -32,7 +32,8 @@ For branch-based testing, use the checkout from which the skill was installed.
    unspecified. Use the workspace's writable catalog if clear, or ask
    when several are suitable. The user needs permission to create a
    schema and run jobs. Select the SQL warehouse automatically when only
-   one is available, or use the user's choice with `--warehouse-id`.
+   one is available, or pass the user's choice as `--warehouse-id` on
+   installer commands that use a warehouse.
 
 ## Default guided demo
 
@@ -82,22 +83,77 @@ After the guided import succeeds, lead with this cue. Link
 For a standalone import, lead with the direct table link and the
 **Sample Data** step. If Databricks prompts for a SQL warehouse, tell the
 user to select the available one.
-Give the import run link as well so the user can see the preview and Delta
-version from that import. Show the first five rows, the exact Delta
-version, and the reserving job link, then pause for the user to inspect.
-To run from the workspace, use **Run now with different parameters** on the
-reserving job, set `method=mack`, and set `source_version` to the printed
-version. After the job completes, link to the run and tell the user to
-open the **reserving** notebook task to see the draft. Provide
-`run_history_url` to inspect the stored results in Catalog Explorer.
+Give the row count and imported Delta version from `import`. Link the
+import run for anyone who wants the exact-version preview. Ask the user
+to say **Run Mack** when they've seen the data, then pause.
 
-If the user wants native Genie, run the installer with action `genie` after
-a successful Mack run. If Genie is unavailable, report the workspace error
-and retain the verified job links and report. If the user wants direct MCP
-access in their agent, run the generated registration command for the
-user's client. If already registered, reuse the entry when its deployment
-settings match. When the client loads MCP configuration at session start,
-tell the user to start a new session to call the registered tools.
+## Run Mack and show the saved Databricks report
+
+On **Run Mack**, link **Open Run reserving in Databricks** to
+`reserving_job.url`. Fill in the actual imported Delta version in the cue.
+
+> **Open Run reserving in Databricks**. From the menu beside **Run now**,
+> choose the option to run with different parameters or settings. Keep
+> `dataset=raa` and `method=mack`, and set `source_version` to **VERSION**.
+> Start the job, open its new entry in **Runs**, and send me that link.
+
+Use the Lakeflow job run ID from that link to check the job and its saved
+evidence. Keep the same profile, catalog and schema.
+
+```bash
+uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py inspect-run --profile PROFILE --catalog CATALOG --schema SCHEMA --run-id RUN_ID
+```
+
+If it's still running, wait and check again. Confirm `mack.job_result`
+is `SUCCESS`, `mack.method` is `mack`, `mack.source_version` matches
+the import, and `mack.draft_report_available` is true. If a check fails,
+tell the user which one and help them recover before moving to Q&A.
+
+Lead with the report cue below. Link **Open the Mack draft in Databricks**
+to `mack.run_url` and **Open the saved run history** to `run_history_url`.
+
+> **Open the Mack draft in Databricks** and select the **reserving** task.
+> Scroll to **Inspect the audit history and draft**. Databricks displays
+> the draft HTML in the notebook output.
+>
+> **Open the saved run history** in Catalog Explorer and find this job run
+> ID. The notebook reads the report back from that row's `artifacts` column.
+
+Give the saved IBNR, Mack standard error, review status, job run ID, attempt
+ID and input Delta version. Describe `review_required` as pending actuarial
+review. Ask the user to say **Ask Genie** once they've shown the report.
+Tell them before Q&A that they can open Claude in this checkout to load
+the MCP server if their current session needs it.
+
+## Ask Genie and Claude about the same run
+
+On **Ask Genie**, run the installer action `genie` with the same profile,
+catalog, schema and warehouse. Link to `genie.url` and give this question,
+filling in the verified Lakeflow job run ID.
+
+> For Mack job run RUN_ID, which origin year and development period had a
+> negative incremental, and by how much? Cite the saved attempt ID.
+
+Ask the user to say **Ask Claude** after seeing the answer. If the
+workspace can't set up Genie, give the reason and offer **Ask Claude**
+as the next step.
+
+On **Ask Claude**, use the installer action `connect` for this deployment.
+From the checkout, run the generated registration command for the user's
+client. Reuse an existing entry with matching settings. If its name is
+already used by a different deployment, choose an unused name for this
+entry, such as `ipc-reserving-SCHEMA`, and keep the other entry.
+
+In Claude Code, check **/mcp** before the question. If the tools aren't
+loaded, have the user open a new session in this checkout. Give the
+question with the actual job run ID so it also works in a fresh session.
+
+> Use the reserving MCP server to look up Mack job run RUN_ID. What IBNR
+> and Mack standard error did it save? Which diagnostic warnings were
+> recorded? Give the attempt ID, input Delta version, and Databricks run link.
+
+Use the read-only `get_raa_run` tool for that job run ID. Link back to the
+same Databricks run the user opened for the draft.
 
 Return the workspace, job links, selected Delta version, run link, saved
 IBNR and report path for a completed rehearsal. Report a draft as pending

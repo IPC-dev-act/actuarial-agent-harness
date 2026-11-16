@@ -1,4 +1,4 @@
-"""Deploy, rehearse and configure Genie for the public RAA demo."""
+"""Deploy, rehearse, inspect and configure Genie for the public RAA demo."""
 
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ def connect(args, installed):
     }
 
 
-async def rehearse(args, installed, *, import_only=False):
+async def run_mcp_action(args, installed):
     env = {name: os.environ[name] for name in ("DATABRICKS_CONFIG_FILE", "HTTPS_PROXY", "NO_PROXY") if name in os.environ}
     server = StdioServerParameters(command=sys.executable, args=server_args(args, installed), env=env)
     async with stdio_client(server) as (read, write):
@@ -124,6 +124,9 @@ async def rehearse(args, installed, *, import_only=False):
                 if response.isError or response.structuredContent is None:
                     raise RuntimeError(f"{name} failed: {response.content}")
                 return response.structuredContent
+
+            if args.action == "inspect-run":
+                return {"mack": await call("get_raa_run", {"run_id": args.run_id})}
 
             async def wait(tool, run_id):
                 deadline = time.monotonic() + 900
@@ -142,7 +145,7 @@ async def rehearse(args, installed, *, import_only=False):
             imported["uploaded_csv"] = started["uploaded_csv"]
             if imported["observations"] != 55:
                 raise ValueError(f"Expected 55 RAA observations: {imported}")
-            if import_only:
+            if args.action == "import":
                 return {"import": imported}
             started = await call("run_raa_reserving", {
                 "method": "mack", "request_id": request_id, "source_version": imported["source_version"],
@@ -220,13 +223,18 @@ def configure_genie(args, installed):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["deploy", "connect", "import", "rehearse", "genie"])
+    parser.add_argument("action", choices=["deploy", "connect", "import", "rehearse", "inspect-run", "genie"])
     parser.add_argument("--profile", required=True)
     parser.add_argument("--catalog", required=True)
     parser.add_argument("--schema", default="ipc_reserving_demo")
     parser.add_argument("--warehouse-id")
     parser.add_argument("--request-id", type=UUID)
+    parser.add_argument("--run-id", type=int, help="Lakeflow job run ID for inspect-run")
     args = parser.parse_args()
+    if args.action == "inspect-run" and (args.run_id is None or args.run_id <= 0):
+        parser.error("inspect-run requires a positive --run-id.")
+    if args.action != "inspect-run" and args.run_id is not None:
+        parser.error("--run-id is only valid with inspect-run.")
     for name in (args.profile, args.catalog, args.schema):
         if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]*", name):
             parser.error("Use letters, digits, underscores or hyphens for profile, catalog and schema.")
@@ -247,7 +255,8 @@ def main():
     if args.action in {"import", "rehearse"}:
         args.request_id = args.request_id or uuid4()
         print(f"{args.action.capitalize()} request ID: {args.request_id}", file=sys.stderr, flush=True)
-        installed.update(asyncio.run(rehearse(args, installed, import_only=args.action == "import")))
+    if args.action in {"import", "rehearse", "inspect-run"}:
+        installed.update(asyncio.run(run_mcp_action(args, installed)))
     if args.action == "genie":
         installed["genie"] = configure_genie(args, installed)
     print(json.dumps(installed, indent=2))

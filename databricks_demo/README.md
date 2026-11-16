@@ -97,26 +97,32 @@ warehouses, pass `--warehouse-id` for the one you want to use.
 
 ## Run in Databricks
 
-For a staged demo, tell Claude Code to deploy and **import the public RAA
-triangle only**. The installer action `import` returns a Catalog Explorer
-link, a preview, the Delta version, and both job links. Open the table link
-and select **Sample Data** to see the current rows. Open the import run
-output to see the preview for the exact Delta version that was imported.
+Use the guided skill and say **Run the import** once the empty schema is
+on screen. Refresh Catalog Explorer when the import finishes and open
+**Sample Data** on the new RAA table. The import run output shows the
+preview for the exact Delta version that was imported.
 
-Open the **Run reserving** job and choose **Run now with different
-parameters**. Set `source_version` to the imported version and keep
-`method=mack`. Open the completed run and select the **reserving** notebook
-task to see the draft report in Databricks. Keep the job run ID for both
-follow-up questions.
+Say **Run Mack**. Open the **Run reserving** job and use the **Run now**
+menu to run with different parameters or settings. Set `source_version`
+to the imported version and keep `method=mack`. Send Claude the new run
+link so it can check the completed job and saved draft with `inspect-run`.
 
-Run the installer's `genie` action once after Mack completes and open the
-returned Genie link. Use `connect` to register the reserving MCP server
-with Claude Code, then open a session that loads it.
+Open the completed run in Databricks. Select the **reserving** task
+and scroll to **Inspect the audit history and draft** to show the rendered
+report in the notebook output. Then open the run history in Catalog
+Explorer and find the same `job_run_id`. That Delta row stores the draft
+HTML in `artifacts` alongside the input version and reserve estimates.
+
+Say **Ask Genie** and **Ask Claude** when you're ready for each question.
+Claude uses `genie` to set up native Genie where the workspace supports
+it, and `connect` to generate MCP registration. If needed, open a Claude
+session in the same checkout to load the server. Use the same job run ID
+for both questions.
 
 - In **Genie**, ask which origin year and development period had a negative
   incremental for that Mack job run, and by how much. Ask for the attempt ID.
 - In **Claude Code**, ask for the saved IBNR and Mack standard error for the
-  same job run ID. Ask which diagnostic put it into actuarial review and for
+  same job run ID. Ask which diagnostic warnings were recorded and for
   the Databricks run link.
 
 The steps below also support a manual upload and notebook run.
