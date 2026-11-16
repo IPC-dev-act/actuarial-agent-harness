@@ -59,10 +59,11 @@ If you've already checked out the [Databricks integration branch](https://github
 open that folder in Claude Code and run `/install-databricks-reserving`.
 
 Claude follows the [project instructions](.claude/skills/install-databricks-reserving/SKILL.md)
-for sign-in and deployment. Open the fresh schema from Claude's link and
-keep the empty **Tables** section on screen. Say **Run the import** and
-refresh that page when Claude says the import has finished. Open the
-new RAA table and use its Delta version to run Mack in Databricks.
+for sign-in and deployment. Open the catalog from Claude's link before
+the demo schema is created and say **Set up the demo**. Refresh to see
+the new schema, open its empty **Tables** section, and say **Run the
+import**. Refresh again when Claude confirms the import. Open the new
+RAA table and use its Delta version to run Mack in Databricks.
 Open the draft in the completed Databricks run and see the saved result
 in Catalog Explorer. Ask Genie and Claude via MCP about that same run.
 See the [Databricks demo guide](databricks_demo/README.md) for prerequisites

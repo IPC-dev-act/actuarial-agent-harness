@@ -43,7 +43,17 @@ demo schema. Use `ipc_reserving_demo` if available, or add a numeric suffix
 if it already exists. Use the same profile, catalog and schema throughout
 the walkthrough. A fresh sign-in test can also use a new CLI profile.
 
-First, deploy into that schema.
+Before deployment, link **Open the catalog in Databricks** to
+`WORKSPACE_URL/explore/data/CATALOG`. Use the verified workspace origin
+and catalog. If the user supplied only a profile, get the origin from
+`details.host` in `databricks auth describe --profile PROFILE --output json`.
+Use the chosen schema name in this cue.
+
+> **Open the catalog in Databricks** and show the schema list. The demo
+> schema **SCHEMA** hasn't been created yet. Say **Set up the demo** when
+> the catalog is on screen.
+
+Wait for **Set up the demo** in the guided walkthrough, then deploy.
 
 ```bash
 uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py deploy --profile PROFILE --catalog CATALOG --schema SCHEMA
@@ -53,10 +63,10 @@ Once deployment succeeds, lead with this cue. Link **Open the demo schema
 in Databricks** to `schema_url` and keep the message focused on the user's
 next action.
 
-> **Open the demo schema in Databricks** and keep the empty **Tables**
-> section on screen. Say **Run the import** when you're looking at it.
-> I'll load the RAA triangle and tell you when to refresh so you can see
-> the new table appear.
+> Refresh the catalog to see the new schema appear. Then **open the demo
+> schema in Databricks** and select **Tables**. Say **Run the import**
+> when you see the empty table list. I'll tell you when to refresh it to
+> see the RAA table arrive.
 
 If you offer a button, label it **Run the import**. Wait for the user
 to continue, then run the import in the same schema.

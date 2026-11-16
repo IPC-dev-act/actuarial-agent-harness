@@ -55,10 +55,10 @@ path. The retry creates a fresh deployment with its own schema, volume and
 jobs. To test browser authentication again, also use a new CLI profile.
 Use a fresh OS user or machine to test prerequisite installation from scratch.
 
-Open the Catalog Explorer link Claude gives you and keep the empty
-**Tables** section on screen. Say **Run the import**, then refresh the
-same page when Claude says the import is complete. Open the new triangle
-table and select **Sample Data** to see the rows.
+Open the catalog link before setup and show the schema list. Say
+**Set up the demo** and refresh after deployment to see the new schema.
+Open its empty **Tables** section and say **Run the import**. Refresh that
+page after the import, then open **Sample Data** on the new triangle table.
 
 Workspace Trash covers workspace objects such as notebooks and files. The
 Lakeflow jobs and Unity Catalog schema, volume, and tables can still exist.
@@ -97,10 +97,11 @@ warehouses, pass `--warehouse-id` for the one you want to use.
 
 ## Run in Databricks
 
-Use the guided skill and say **Run the import** once the empty schema is
-on screen. Refresh Catalog Explorer when the import finishes and open
-**Sample Data** on the new RAA table. The import run output shows the
-preview for the exact Delta version that was imported.
+Start with the catalog on screen and say **Set up the demo**. Refresh to
+show the new schema. Open its empty **Tables** section and say **Run the
+import**. Refresh when the import finishes and open **Sample Data** on
+the new RAA table. The import run output shows the preview for the exact
+Delta version that was imported.
 
 Say **Run Mack**. Open the **Run reserving** job and use the **Run now**
 menu to run with different parameters or settings. Set `source_version`
