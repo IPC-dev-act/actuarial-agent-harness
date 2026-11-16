@@ -64,8 +64,9 @@ the demo schema is created and say **Set up the demo**. Refresh to see
 the new schema, open its empty **Tables** section, and say **Run the
 import**. Refresh again when Claude confirms the import. Open the new
 RAA table and use its Delta version to run Mack in Databricks.
-Open the draft in the completed Databricks run and see the saved result
-in Catalog Explorer. Ask Genie and Claude via MCP about that same run.
+Open the rendered draft in the completed Databricks run and say
+**Report shown** before moving to Catalog Explorer and asking Genie
+and Claude via MCP about that same run.
 See the [Databricks demo guide](databricks_demo/README.md) for prerequisites
 and a clean retry.
 

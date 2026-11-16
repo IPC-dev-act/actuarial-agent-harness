@@ -119,19 +119,22 @@ is `SUCCESS`, `mack.method` is `mack`, `mack.source_version` matches
 the import, and `mack.draft_report_available` is true. If a check fails,
 tell the user which one and help them recover before moving to Q&A.
 
-Lead with the report cue below. Link **Open the Mack draft in Databricks**
-to `mack.run_url` and **Open the saved run history** to `run_history_url`.
+Make showing the rendered draft its own step. Link **Open the Mack draft
+in Databricks** to `mack.run_url` and give the user this cue.
 
 > **Open the Mack draft in Databricks** and select the **reserving** task.
-> Scroll to **Inspect the audit history and draft**. Databricks displays
-> the draft HTML in the notebook output.
->
-> **Open the saved run history** in Catalog Explorer and find this job run
-> ID. The notebook reads the report back from that row's `artifacts` column.
+> Scroll past the run-history table to the rendered HTML report under
+> **Inspect the audit history and draft**. Put the report on screen and
+> say **Report shown** when you're ready to continue.
+
+Pause at this cue. Once the user says **Report shown**, link **Open the
+saved run history** to `run_history_url` and point out the row for this
+job run ID. The notebook reads the draft HTML back from that row's
+`artifacts` column.
 
 Give the saved IBNR, Mack standard error, review status, job run ID, attempt
 ID and input Delta version. Describe `review_required` as pending actuarial
-review. Ask the user to say **Ask Genie** once they've shown the report.
+review. Ask the user to say **Ask Genie** to start Q&A.
 Tell them before Q&A that they can open Claude in this checkout to load
 the MCP server if their current session needs it.
 

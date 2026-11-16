@@ -108,11 +108,13 @@ menu to run with different parameters or settings. Set `source_version`
 to the imported version and keep `method=mack`. Send Claude the new run
 link so it can check the completed job and saved draft with `inspect-run`.
 
-Open the completed run in Databricks. Select the **reserving** task
-and scroll to **Inspect the audit history and draft** to show the rendered
-report in the notebook output. Then open the run history in Catalog
-Explorer and find the same `job_run_id`. That Delta row stores the draft
-HTML in `artifacts` alongside the input version and reserve estimates.
+Open the completed run in Databricks and select the **reserving** task.
+Scroll past the run-history table under **Inspect the audit history and
+draft** to show the rendered report in the notebook output. Say **Report
+shown** when you're ready to continue. Then open the run history in
+Catalog Explorer and find the same `job_run_id`. That Delta row stores
+the draft HTML in `artifacts` alongside the input version and reserve
+estimates.
 
 Say **Ask Genie** and **Ask Claude** when you're ready for each question.
 Claude uses `genie` to set up native Genie where the workspace supports
