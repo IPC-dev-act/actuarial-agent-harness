@@ -59,9 +59,11 @@ If you've already checked out the [Databricks integration branch](https://github
 open that folder in Claude Code and run `/install-databricks-reserving`.
 
 Claude follows the [project instructions](.claude/skills/install-databricks-reserving/SKILL.md)
-for sign-in and deployment. It opens a fresh schema and pauses at the empty
-**Tables** section. After you continue, Claude imports the public RAA triangle
-and gives you the link and Delta version for running Mack in Databricks.
+for sign-in and deployment. Open the fresh schema from Claude's link and
+keep the empty **Tables** section on screen. Say **Run the import** and
+refresh that page when Claude says the import has finished. Open the
+new RAA table in Databricks. Claude gives you its Delta version for the
+Mack run.
 See the [Databricks demo guide](databricks_demo/README.md) for prerequisites
 and a clean retry.
 

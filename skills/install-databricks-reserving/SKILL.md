@@ -48,19 +48,21 @@ First, deploy into that schema.
 uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py deploy --profile PROFILE --catalog CATALOG --schema SCHEMA
 ```
 
-Give the user the **Open demo schema in Databricks** link from
-`schema_url`. Tell them to open **Tables** and confirm it has no tables.
-The deployment may already list a volume. Pause before importing and
-wait for the user to continue.
+Once deployment succeeds, lead with this cue. Link **Open the demo schema
+in Databricks** to `schema_url` and keep the message focused on the user's
+next action.
 
-When they are ready, run the import in the same schema.
+> **Open the demo schema in Databricks** and keep the empty **Tables**
+> section on screen. Say **Run the import** when you're looking at it.
+> I'll load the RAA triangle and tell you when to refresh so you can see
+> the new table appear.
+
+If you offer a button, label it **Run the import**. Wait for the user
+to continue, then run the import in the same schema.
 
 ```bash
 uv run --no-project --python '>=3.11' --with mcp==1.28.1 python scripts/install_databricks_demo.py import --profile PROFILE --catalog CATALOG --schema SCHEMA
 ```
-
-Ask the user to refresh the schema so they can see `ipc_reserving_demo_triangles` appear.
-Continue with the table link and imported Delta version below.
 
 For a deploy-only request, stop after deployment and give the schema and job
 links. For an explicit uninterrupted end-to-end run, use `rehearse` in place
@@ -70,9 +72,16 @@ its printed `--request-id` to reuse the original Lakeflow submissions.
 
 ## Guide the user through the imported data
 
-Lead with a clickable **Open RAA triangle in Databricks** link from
-`input_table_url`. Tell the user to select **Sample Data** and use the
-available SQL warehouse if prompted. The table shows the current rows.
+After the guided import succeeds, lead with this cue. Link
+**ipc_reserving_demo_triangles** to `input_table_url`.
+
+> Refresh the same **Tables** page now. The **ipc_reserving_demo_triangles**
+> table should appear. Open it and select **Sample Data** to see the rows
+> that just landed.
+
+For a standalone import, lead with the direct table link and the
+**Sample Data** step. If Databricks prompts for a SQL warehouse, tell the
+user to select the available one.
 Give the import run link as well so the user can see the preview and Delta
 version from that import. Show the first five rows, the exact Delta
 version, and the reserving job link, then pause for the user to inspect.
