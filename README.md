@@ -70,6 +70,22 @@ and Claude via MCP about that same run.
 See the [Databricks demo guide](databricks_demo/README.md) for prerequisites
 and a clean retry.
 
+## Actuary in Snowflake
+
+```bash
+git clone --branch snowflake-integration --single-branch https://github.com/IPC-dev-act/actuarial-agent-harness.git actuary-in-snowflake
+cd actuary-in-snowflake
+claude
+```
+
+Run `/install-snowflake-reserving` in Claude Code for the guided Snowflake
+walkthrough. It pauses before setup, import and Mack so you can record the
+changes in Snowsight as they happen.
+
+The [Snowflake demo guide](snowflake_demo/README.md) uses the same RAA triangle,
+Mack and Basic Chain Ladder workflows. It covers input snapshots, Snowpark
+execution, saved draft reports and the two Q&A routes over run evidence.
+
 ## Three ways to use this locally
 
 Ordered by increasing agent autonomy — the same progression a real actuarial
