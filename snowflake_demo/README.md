@@ -5,15 +5,39 @@ stages the CSV, pins the import, runs the shared Python harness and stores the
 original report and evidence. A successful query can still produce a draft
 requiring actuarial review or stop before fitting if validation fails.
 
+## Connect once
+
+The demo reuses a named [Python Connector connection] from outside the checkout.
+Use `ipc_demo` or pass `--connection YOUR_PROFILE` if you already have a
+working connection. You can use that same profile from every fresh clone on
+this machine.
+
+For a standalone trial, configure [key-pair authentication] once. If you
+already generated a key and have an `ALTER USER` statement for it, go to step 2.
+
+1. Generate a local key pair using Snowflake's guide. Keep the private key
+   on your machine. Use your Snowflake user object name in the SQL statement
+   and your `LOGIN_NAME` in the connector profile.
+2. In Snowsight, open an existing `.sql` file from **Recent projects**, or
+   open **Workspaces → + Add New → SQL File**. Select a role authorized to
+   register the public key and a warehouse. Paste the full `ALTER USER`
+   statement into the SQL editor and click **▶ Run**. For a new registration,
+   Snowflake recommends a [named key pair]. An existing generated statement
+   that uses `SET RSA_PUBLIC_KEY` works with an unused key slot.
+3. Use `authenticator = "SNOWFLAKE_JWT"` and `private_key_file` in your local
+   connector profile. Run `sf_demo check` below once to verify the role and
+   warehouse before recording.
+
+Use [browser-based SSO] with `externalbrowser` when your Snowflake account
+has a SAML identity provider configured. A SAML identity provider error on a
+standalone trial is a cue to use the key-pair setup above.
+
 ## Set up the demo
 
-Use a named [Python Connector connection] called `ipc_demo`, configured outside
-this checkout with your Snowflake account identifier, username, role and
-account authentication method. Snowflake provides setup guides for
-[browser-based SSO] and [key-pair authentication]. The CLI uses `COMPUTE_WH`
-by default. The setup role needs privileges to create the demo database and
-schema objects and to use the [shared PyPI repository]. The account must have a
-usable warehouse. The trial's AI features are a separate capability.
+The CLI uses `COMPUTE_WH` by default. The setup role needs access to a usable
+warehouse, privileges to create the demo database and schema objects, and
+permission to use the [shared PyPI repository]. The trial's AI features are a
+separate capability.
 
 From the repository root, build the wheel and define a terminal shortcut:
 
@@ -124,3 +148,4 @@ its packaged HTML template as a regular file.
 [key-pair authentication]: https://docs.snowflake.com/en/user-guide/key-pair-auth
 [shared PyPI repository]: https://docs.snowflake.com/en/developer-guide/udf/python/udf-python-packages
 [Cortex Agents]: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents
+[named key pair]: https://docs.snowflake.com/en/sql-reference/sql/alter-user-add-key-pair

@@ -12,14 +12,25 @@ setup and troubleshooting. Use the public RAA fixture for the walkthrough.
 ## Prepare the checkout and connection
 
 - Check for `uv`. Help the user install it using the [official uv instructions](https://docs.astral.sh/uv/getting-started/installation/) if missing.
-- Build the wheel with `uv build --wheel --python 3.12`.
 - Reuse a named Snowflake Python Connector profile if the user gives one.
-  Otherwise use `ipc_demo`. Run `check` using the command prefix below. If
-  a profile is missing, use the account identifier and login name from the
-  signed-in Snowsight account and help the user set up the [named connection](https://docs.snowflake.com/en/developer-guide/python-connector/python-connector-connect#connecting-using-the-connections-toml-file).
-  Let the user complete authentication in their browser or local terminal.
-  Retry `check` once the login is ready. Use an available warehouse and a role
-  that can create the demo objects. Preserve the existing account's settings.
+  Otherwise run `check` against `ipc_demo`. Reuse a working profile across
+  fresh clones. An available warehouse and a role that can create the demo
+  objects are required.
+- If the profile is missing or `externalbrowser` fails with a SAML identity
+  provider error, follow [the one-time sign-in instructions](../../../snowflake_demo/README.md#connect-once).
+  For a standalone trial, guide the user through key-pair setup. Reuse any
+  key they already generated for this profile. Use `externalbrowser` for
+  accounts with configured SAML SSO.
+- When a public-key registration statement is ready, give the full click
+  path and wait for this cue:
+
+  > Open your `.sql` file in Snowsight, or choose **Workspaces → + Add New → SQL File**.
+  > Paste the full `ALTER USER …` statement into the SQL editor and click
+  > **▶ Run**. When Snowsight confirms success, say **Key added**.
+
+  Save `ipc_demo` in the local connector configuration outside the checkout.
+  Rerun `check` after the cue and continue when it returns the role and warehouse.
+- Build the wheel with `uv build --wheel --python 3.12`.
 
 Use this prefix for each command. Prepend `--connection`, `--database`,
 `--schema` and `--warehouse` before the subcommand if overriding defaults.
