@@ -58,18 +58,21 @@ state. Keep each cue short and wait for it before taking the next action.
    55 observations and retain the returned import ID. Tell the user to
    refresh Snowsight and open the `RESERVING_TRIANGLES` view. Give them a
    `SELECT` filtered to the actual import ID to show the imported rows.
-3. **Run Mack.** On their cue, run `run IMPORT_ID --method mack`. Run
-   `inspect ATTEMPT_ID` with the returned ID and verify that the saved run
-   matches the import and carries `review_required`. The reference result
-   is 52,135.23 IBNR and 26,909.01 Mack standard error. State figures from
-   the saved output and explain the pending review. Run
+3. **Run Mack.** On their cue, give the user a paste-ready `CALL` from
+   [Run Mack yourself in Snowsight](../../../snowflake_demo/README.md#run-mack-yourself-in-snowsight)
+   with the actual schema and import ID. Have them paste it into a Snowsight
+   SQL file and click **▶ Run**. Wait for them to share the new `attempt_id`
+   from the result. Then run `inspect ATTEMPT_ID` and verify that the saved
+   run matches the import and carries `review_required`. The reference
+   result is 52,135.23 IBNR and 26,909.01 Mack standard error. State figures
+   from the saved output and explain the pending review. Run
    `report ATTEMPT_ID --output PATH` into the evidence folder. Open the
    resulting HTML in a browser if possible and give the user its full path.
 4. **Report shown.** Pause while the user shows the draft. Then give the
-   query ID for Snowflake Query History and the attempt ID. If the user
-   wants an evidence question, use the Snowsight SQL example from the guide
-   with that exact attempt ID. The saved check should show origin 1982,
-   development age 7 and a −103 incremental.
+   attempt ID and point them to the `CALL` in Snowsight Query History for
+   its query ID. If the user wants an evidence question, use the Snowsight
+   SQL example from the guide with that exact attempt ID. The saved check
+   should show origin 1982, development age 7 and a −103 incremental.
 
 For this first take, use the direct Snowpark procedure. If a step fails,
 identify the failing command, its Snowflake error or query ID when present,

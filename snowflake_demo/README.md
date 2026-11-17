@@ -84,6 +84,34 @@ sf_demo report <attempt_id> --output raa-draft.html
 | `raa`, `chain_ladder` | 52,135.23 | Null | Draft, review required |
 | `gapped`, `mack` | Null | Null | `no_gaps` blocks fitting and no draft is saved |
 
+## Run Mack yourself in Snowsight
+
+Open a SQL file in Snowsight, select your warehouse, and replace `<import_id>`
+with the ID returned by `sf_demo import`. Use your demo database and schema
+if they differ from these defaults. Paste the full statement and click
+**▶ Run**.
+
+```sql
+CALL IPC_RESERVING_DEMO.DEMO.RUN_RESERVING(
+  '<import_id>',
+  'mack',
+  LOWER(REPLACE(UUID_STRING(), '-', '')),
+  NULL::VARCHAR
+);
+```
+
+Copy the new `attempt_id` from the result. Use it with `sf_demo inspect`
+and `sf_demo report` to read the evidence and download the draft for the
+run you just started. Find this `CALL` in Snowsight Query History for its
+query ID.
+
+The procedure stores its Python handler inline, from `snowflake_demo/procedure.py`.
+It loads `ipc_reserving_harness.zip` from `RESERVING_FILES/bundles/<bundle_sha256>/`.
+Inside the ZIP, `databricks_demo/reserving.py` runs the shared harness and
+`engine/chainladder_adapter.py` calls the `chainladder` implementation of Mack.
+
+## Run as a Snowflake Task
+
 For the on-demand Snowflake job view, use `sf_demo setup-task` and
 `sf_demo run-task <import_id> --method mack`. The task owner role needs the
 account-level `EXECUTE TASK` privilege and warehouse access. The task has no
